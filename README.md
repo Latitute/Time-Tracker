@@ -9,7 +9,6 @@ Web app theo dõi thời gian làm việc với thống kê và gợi ý cải t
 - **Ghi nhận thời gian** làm việc theo từng công việc (task)
 - **Xem thống kê** qua biểu đồ (cột, tròn) và các chỉ số KPI
 - **Lên lịch** trước cho các công việc cần làm
-- **Nhận gợi ý** cải thiện (nhắc nghỉ, cảnh báo làm thêm giờ, v.v.)
 
 Ứng dụng gồm 2 phần chạy song song:
 
@@ -105,11 +104,6 @@ timetracker/
 │       └── db/              # Database
 │           ├── schema.sql           # Tạo bảng (chạy 1 lần)
 │           └── seed.sql             # Dữ liệu mẫu (tùy chọn)
-│
-├── docs/                    # Tài liệu thiết kế
-│   ├── design-guidelines.md        # Hướng dẫn màu sắc, font chữ
-│   ├── tech-stack.md               # Chi tiết công nghệ
-│   └── wireframe/                  # Bản nháp giao diện (HTML)
 │
 ├── .env                     # Biến môi trường (KHÔNG commit file này!)
 ├── package.json             # Cấu hình root: concurrently chạy cả 2
