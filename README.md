@@ -112,6 +112,66 @@ timetracker/
 
 ---
 
+## Cài đặt và chạy
+
+### Yêu cầu trước
+
+- **Node.js 18+** — tải tại https://nodejs.org (chọn LTS)
+- **MySQL 8+** — tải tại https://dev.mysql.com/downloads/ hoặc cài qua Homebrew:
+
+```bash
+# macOS (Homebrew)
+brew install mysql
+brew services start mysql
+```
+
+### Các bước cài đặt
+
+```bash
+# 1. Cài đặt các thư viện
+npm install
+cd frontend && npm install && cd ..
+cd backend && npm install && cd ..
+
+# 2. Tạo database
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS timetracker"
+
+# 3. Tạo bảng (chạy 1 lần duy nhất)
+mysql -u root timetracker < backend/src/db/schema.sql
+
+# 4. (Tùy chọn) Nạp dữ liệu mẫu
+mysql -u root timetracker < backend/src/db/seed.sql
+
+# 5. Tạo file .env (xem mẫu ở dưới)
+```
+
+### File .env (tạo ở thư mục gốc)
+
+```env
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=timetracker
+JWT_SECRET=your-secret-key-here
+PORT=3001
+```
+
+> **Lưu ý:** Nếu MySQL của bạn có mật khẩu, điền vào `DB_PASSWORD`. `JWT_SECRET` là chuỗi bí mật để mã hóa token — hãy đổi thành chuỗi ngẫu nhiên của bạn.
+
+### Chạy ứng dụng
+
+```bash
+# Khởi động cả frontend + backend
+npm run dev
+
+# Truy cập:
+# Frontend: http://localhost:5173
+# Backend:  http://localhost:3001
+```
+
+---
+
 ## Các bước phát triển (Step Branches)
 
 Dự án được phát triển theo 6 bước. Mỗi bước có một branch riêng trên GitHub, chỉ chứa code của bước đó + các bước trước (không chứa code từ bước sau).
