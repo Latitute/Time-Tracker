@@ -5,7 +5,7 @@
  *    Dùng khi timer có target_duration > 0.
  *    Khi remainingSeconds về 0, isExpired = true.
  *
- *  - startUp(existingElapsed)         → Stopwatch (đếm xuôi)
+ *  - startUp(serverStartTime)         → Stopwatch (đếm xuôi)
  *    Dùng khi timer không có target_duration (stopwatch mode).
  *    Không bao giờ expire.
  *
@@ -16,16 +16,28 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 
 /**
- * Parse start_time từ MySQL an toàn với timezone.
- * MySQL trả "2026-09-29 15:00:00" (không Z) — thêm Z để ép parse UTC
- * nhất quán giữa backend (MySQL UTC) và frontend (browser local).
+ * Parse start_time từ MySQL sang milliseconds.
+ *
+ * MySQL trả "2026-09-29 15:00:00" (không có Z) — thêm Z để ép parse UTC.
+ * Nếu chuỗi không parse được → throw (KHÔNG fallback về Date.now()).
+ * Fallback ngầm sẽ làm timer tưởng vừa bắt đầu và che giấu data corruption.
+ *
+ * @throws {Error} Nếu startTime không thể parse thành timestamp hợp lệ
  */
 function parseStartMs(startTime) {
-  if (startTime instanceof Date) return startTime.getTime()
-  if (typeof startTime === 'number') return startTime
+  if (startTime instanceof Date) {
+    if (Number.isNaN(startTime.getTime())) throw new Error('Invalid timer start_time: Date object is invalid')
+    return startTime.getTime()
+  }
+  if (typeof startTime === 'number') {
+    if (Number.isNaN(startTime)) throw new Error('Invalid timer start_time: NaN')
+    return startTime
+  }
   const iso = String(startTime).replace(' ', 'T').replace(/Z?$/, 'Z')
   const ms = Date.parse(iso)
-  return Number.isNaN(ms) ? Date.now() : ms
+  // #17: Không fallback — throw để caller quyết định cách xử lý lỗi
+  if (Number.isNaN(ms)) throw new Error(`Invalid timer start_time: "${startTime}"`)
+  return ms
 }
 
 export function useTimer() {
@@ -49,11 +61,12 @@ export function useTimer() {
   // ─── Countdown (đếm ngược) ───────────────────────────────────────────────
   // targetDuration: số giây từ target_duration DB
   // startTime:      start_time từ DB (string "YYYY-MM-DD HH:mm:ss" hoặc Date)
+  // throws nếu startTime không hợp lệ
   const start = useCallback((targetDuration, startTime) => {
     if (intervalRef.current) return
     modeRef.current          = 'down'
     targetSecondsRef.current = targetDuration
-    startMsRef.current       = parseStartMs(startTime)
+    startMsRef.current       = parseStartMs(startTime) // throws on invalid
 
     setIsExpired(false)
     setIsRunning(true)
@@ -77,11 +90,16 @@ export function useTimer() {
   }, [clearTimer])
 
   // ─── Stopwatch (đếm xuôi) ────────────────────────────────────────────────
-  // existingElapsed: số giây đã trôi qua tính từ start_time (dùng khi restore sau refresh)
-  const startUp = useCallback((existingElapsed = 0) => {
+  // serverStartTime: start_time từ server (string hoặc Date).
+  // throws nếu serverStartTime không hợp lệ (= data corruption từ server)
+  const startUp = useCallback((serverStartTime = null) => {
     if (intervalRef.current) return
     modeRef.current    = 'up'
-    startMsRef.current = Date.now() - existingElapsed * 1000
+    // Dùng server timestamp để tránh sai lệch đồng hồ client/server.
+    // null → fallback về Date.now() (khi tạo mới, không phải restore)
+    startMsRef.current = serverStartTime
+      ? parseStartMs(serverStartTime) // throws on invalid
+      : Date.now()
 
     setIsExpired(false)
     setIsRunning(true)

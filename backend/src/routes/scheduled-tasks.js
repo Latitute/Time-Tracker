@@ -3,14 +3,58 @@ import { authMiddleware } from '../middleware/auth.js'
 import pool from '../config/db.js'
 
 const router = Router()
-
 router.use(authMiddleware)
+
+// ─── Validation helpers ───────────────────────────────────────────────────────
+
+/**
+ * YYYY-MM-DD với round-trip check — bắt các ngày tưởng hợp lệ như 2026-02-30.
+ */
+function isValidDate(str) {
+  if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return false
+  const [y, m, d] = str.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+}
+
+/**
+ * HH:mm hoặc HH:mm:ss với range check — bắt 25:80, 99:99, v.v.
+ * null/undefined = hợp lệ (field optional).
+ */
+function isValidTime(str) {
+  if (str == null) return true
+  const m = typeof str === 'string' && str.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/)
+  if (!m) return false
+  const h = Number(m[1]), min = Number(m[2]), sec = Number(m[3] ?? 0)
+  return h >= 0 && h <= 23 && min >= 0 && min <= 59 && sec >= 0 && sec <= 59
+}
+
+/**
+ * Số nguyên dương (> 0). null/undefined = hợp lệ (field optional).
+ * 0 giây không có nghĩa với scheduled task.
+ */
+function isValidDuration(val) {
+  if (val == null) return true
+  return Number.isInteger(val) && val > 0
+}
+
+// ─── GET /api/scheduled-tasks ────────────────────────────────────────────────
 
 router.get('/', async (req, res) => {
   try {
     const { date, from, to } = req.query
 
-    if (from && to) {
+    if (from || to) {
+      // Yêu cầu cả hai khi dùng range
+      if (!from || !to) {
+        return res.status(400).json({ error: 'Cần cả from và to khi dùng range' })
+      }
+      if (!isValidDate(from) || !isValidDate(to)) {
+        return res.status(400).json({ error: 'from/to không hợp lệ (cần YYYY-MM-DD)' })
+      }
+      if (from > to) {
+        return res.status(400).json({ error: 'from phải trước hoặc bằng to' })
+      }
       const [rows] = await pool.execute(
         `SELECT st.*, t.title as task_title, t.color as task_color
          FROM scheduled_tasks st
@@ -24,6 +68,9 @@ router.get('/', async (req, res) => {
 
     if (!date) {
       return res.status(400).json({ error: 'Thiếu tham số date' })
+    }
+    if (!isValidDate(date)) {
+      return res.status(400).json({ error: 'date không hợp lệ (cần YYYY-MM-DD)' })
     }
 
     const [rows] = await pool.execute(
@@ -40,15 +87,27 @@ router.get('/', async (req, res) => {
   }
 })
 
+// ─── POST /api/scheduled-tasks ───────────────────────────────────────────────
+
 router.post('/', async (req, res) => {
   try {
     const { task_id, scheduled_date, start_time, estimated_duration } = req.body
 
+    // ── Validation ────────────────────────────────────────────────────────────
     if (!task_id || !scheduled_date) {
       return res.status(400).json({ error: 'Thiếu task_id hoặc scheduled_date' })
     }
+    if (!isValidDate(scheduled_date)) {
+      return res.status(400).json({ error: 'scheduled_date không hợp lệ (cần YYYY-MM-DD)' })
+    }
+    if (!isValidTime(start_time)) {
+      return res.status(400).json({ error: 'start_time không hợp lệ (cần HH:mm hoặc HH:mm:ss, VD: 09:30)' })
+    }
+    // estimated_duration phải > 0; dùng ?? (không phải ||) để 0 không fallback về 3600
+    if (estimated_duration !== undefined && estimated_duration !== null && !isValidDuration(estimated_duration)) {
+      return res.status(400).json({ error: 'estimated_duration phải là số nguyên dương (đơn vị: giây)' })
+    }
 
-    // Kiểm tra task có thuộc user và còn active không
     const [tasks] = await pool.execute(
       'SELECT id FROM tasks WHERE id = ? AND user_id = ? AND is_active = TRUE',
       [task_id, req.user.id]
@@ -57,12 +116,15 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy công việc' })
     }
 
-     const [result] = await pool.execute(
+    // ?? phân biệt "không gửi" (null/undefined → default 3600) với "gửi 0" (→ lỗi validation trên)
+    const resolvedDuration = estimated_duration ?? 3600
+
+    const [result] = await pool.execute(
       'INSERT INTO scheduled_tasks (user_id, task_id, scheduled_date, start_time, estimated_duration) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, task_id, scheduled_date, start_time || null, estimated_duration || 3600]
+      [req.user.id, task_id, scheduled_date, start_time || null, resolvedDuration]
     )
 
-const [rows] = await pool.execute(
+    const [rows] = await pool.execute(
       `SELECT st.*, t.title as task_title, t.color as task_color
        FROM scheduled_tasks st
        LEFT JOIN tasks t ON st.task_id = t.id
@@ -74,6 +136,8 @@ const [rows] = await pool.execute(
     res.status(500).json({ error: 'Lỗi server' })
   }
 })
+
+// ─── PUT /api/scheduled-tasks/:id ────────────────────────────────────────────
 
 router.put('/:id', async (req, res) => {
   try {
@@ -87,12 +151,23 @@ router.put('/:id', async (req, res) => {
 
     const { is_completed, start_time, estimated_duration } = req.body
 
+    // ── Validation ────────────────────────────────────────────────────────────
+    if (is_completed !== undefined && typeof is_completed !== 'boolean') {
+      return res.status(400).json({ error: 'is_completed phải là boolean' })
+    }
+    if (start_time !== undefined && !isValidTime(start_time)) {
+      return res.status(400).json({ error: 'start_time không hợp lệ (cần HH:mm hoặc HH:mm:ss)' })
+    }
+    if (estimated_duration !== undefined && estimated_duration !== null && !isValidDuration(estimated_duration)) {
+      return res.status(400).json({ error: 'estimated_duration phải là số nguyên dương (đơn vị: giây)' })
+    }
+
     await pool.execute(
       'UPDATE scheduled_tasks SET is_completed = ?, start_time = ?, estimated_duration = ? WHERE id = ?',
       [
-        is_completed !== undefined ? is_completed : existing[0].is_completed,
-        start_time ?? existing[0].start_time,
-        estimated_duration ?? existing[0].estimated_duration,
+        is_completed        !== undefined ? is_completed        : existing[0].is_completed,
+        start_time          !== undefined ? start_time          : existing[0].start_time,
+        estimated_duration  !== undefined ? estimated_duration  : existing[0].estimated_duration,
         req.params.id,
       ]
     )
@@ -110,6 +185,8 @@ router.put('/:id', async (req, res) => {
   }
 })
 
+// ─── DELETE /api/scheduled-tasks/:id ─────────────────────────────────────────
+
 router.delete('/:id', async (req, res) => {
   try {
     const [existing] = await pool.execute(
@@ -119,7 +196,6 @@ router.delete('/:id', async (req, res) => {
     if (existing.length === 0) {
       return res.status(404).json({ error: 'Không tìm thấy lịch hẹn' })
     }
-
     await pool.execute('DELETE FROM scheduled_tasks WHERE id = ?', [req.params.id])
     res.json({ message: 'Đã xóa lịch hẹn' })
   } catch {

@@ -2,26 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTimer } from '../hooks/useTimer.js'
 import { task, timeEntry, timer as timerApi } from '../services/api.js'
-import { formatTime, formatDuration, todayDate } from '../utils/format-time.js'
+import { formatTime, formatDuration, formatLocalTime, todayDate } from '../utils/format-time.js'
 import styles from './TimerPage.module.css'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PRIORITY_LEVELS = [
-  { value: 1, hex: '#4895EF', label: 'Không vội'  },
-  { value: 2, hex: '#06D6A0', label: 'Bình thường' },
-  { value: 3, hex: '#FFD166', label: 'Quan trọng'  },
-  { value: 4, hex: '#FB5607', label: 'Gấp'         },
-  { value: 5, hex: '#EF476F', label: 'Cấp thiết'   },
-]
-
 const DURATION_PRESETS = [5, 10, 15, 25, 30, 45, 60]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getPriorityInfo(value = 1) {
-  return PRIORITY_LEVELS.find(p => p.value === value) || PRIORITY_LEVELS[0]
-}
 
 function getEntryStatus(entry) {
   if (entry.end_time) return 'done'
@@ -46,15 +34,14 @@ export default function TimerPage() {
   const [todayEntries, setTodayEntries] = useState([])
 
   // Timer state
-  const [activeEntryId, setActiveEntryId]       = useState(null)
-  const [starting, setStarting]                 = useState(false)
+  const [activeEntryId, setActiveEntryId] = useState(null)
+  const [starting, setStarting]           = useState(false)
+  const [stopping, setStopping]           = useState(false)  // chống duplicate stop request
 
   // Công việc đang chọn
   const [filterTaskId, setFilterTaskId] = useState('')
 
-  // Chế độ: có đặt thời lượng không?
-  // false → stopwatch (đếm xuôi, không giới hạn)
-  // true  → countdown (đếm ngược từ durationMinutes)
+  // Chế độ timer
   const [hasTargetDuration, setHasTargetDuration] = useState(false)
   const [durationMinutes, setDurationMinutes]     = useState(25)
 
@@ -62,11 +49,25 @@ export default function TimerPage() {
   const [showQuickForm, setShowQuickForm] = useState(false)
   const [quickTitle, setQuickTitle]       = useState('')
   const [quickDesc, setQuickDesc]         = useState('')
-  const [quickPriority, setQuickPriority] = useState(1)
 
   // Notification
   const [notification, setNotification] = useState(null)
   const expiredHandledRef = useRef(false)
+  // Cleanup ref cho notification timeout — tránh setState sau unmount
+  const notifTimerRef = useRef(null)
+
+  // ─── Notification helper ──────────────────────────────────────────────────
+
+  const showNotification = useCallback((msg, durationMs = 8000) => {
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
+    setNotification(msg)
+    notifTimerRef.current = setTimeout(() => setNotification(null), durationMs)
+  }, [])
+
+  // Clear timeout khi unmount
+  useEffect(() => () => {
+    if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
+  }, [])
 
   // ─── Load data + khôi phục timer đang chạy ────────────────────────────────
 
@@ -88,15 +89,18 @@ export default function TimerPage() {
         const isCountdown = active.target_duration > 0
         setHasTargetDuration(isCountdown)
 
-        if (isCountdown) {
-          // Countdown: tính remaining từ start_time + target_duration
-          countdown.start(active.target_duration, active.start_time)
-        } else {
-          // Stopwatch: tính elapsed từ start_time đến now
-          const elapsed = Math.max(0, Math.floor(
-            (Date.now() - new Date(active.start_time).getTime()) / 1000
-          ))
-          countdown.startUp(elapsed)
+        try {
+          if (isCountdown) {
+            countdown.start(active.target_duration, active.start_time)
+          } else {
+            countdown.startUp(active.start_time)
+          }
+        } catch (timerErr) {
+          // #17: start_time từ server không parse được → data corruption
+          // Không restore timer — hiển thị lỗi và để user tải lại trang
+          console.error('[TimerPage] Invalid start_time from server:', timerErr)
+          showNotification('Không thể khôi phục timer. Vui lòng tải lại trang.')
+          setActiveEntryId(null)
         }
       }
     } catch (err) {
@@ -112,27 +116,33 @@ export default function TimerPage() {
   useEffect(() => {
     if (!countdown.isExpired || expiredHandledRef.current) return
     expiredHandledRef.current = true
+    setStopping(true)
 
     const taskTitle = tasks.find(t => t.id === Number(filterTaskId))?.title
       || todayEntries.find(e => e.id === activeEntryId)?.task_title
       || 'công việc'
 
-    // Auto-stop: backend ghi end_time, actual duration, overtime
+    // #20: Thông báo "đang lưu" TRƯỚC khi gọi API
+    showNotification(`⏰ Hết giờ! Đang lưu kết quả...`, 30_000)
+
     timerApi.stop(token)
       .then(async () => {
+        // #19: Chỉ reset UI sau khi API thành công
         countdown.reset()
         setActiveEntryId(null)
+        setHasTargetDuration(false)
         const entries = await timeEntry.list(token, todayDate())
         setTodayEntries(entries)
+        // #20: Cập nhật notification thành thông báo thành công
+        showNotification(`⏰ Hết giờ! Công việc "${taskTitle}" đã hoàn thành.`)
       })
       .catch(err => {
+        // #19: API fail → KHÔNG reset UI, timer vẫn hiện 00:00, user có thể bấm Dừng thủ công
         console.warn('[TimerPage auto-stop]', err)
-        countdown.reset()
-        setActiveEntryId(null)
+        expiredHandledRef.current = false // cho phép retry
+        showNotification('Không thể lưu kết quả tự động. Vui lòng bấm "Dừng lại" để thử lại.')
       })
-
-    setNotification(`⏰ Hết giờ! Công việc "${taskTitle}" đã hoàn thành.`)
-    setTimeout(() => setNotification(null), 8000)
+      .finally(() => setStopping(false))
   }, [countdown.isExpired]) // eslint-disable-line
 
   // ─── Tạo task nhanh ───────────────────────────────────────────────────────
@@ -144,19 +154,16 @@ export default function TimerPage() {
       const created = await task.create(token, {
         title:       quickTitle.trim(),
         description: quickDesc.trim(),
-        priority:    quickPriority,
-        color:       getPriorityInfo(quickPriority).hex,
       })
       setQuickTitle('')
       setQuickDesc('')
-      setQuickPriority(1)
       setShowQuickForm(false)
       const taskList = await task.list(token)
       setTasks(taskList)
-      // Tự động chọn task vừa tạo
       if (created?.id) setFilterTaskId(String(created.id))
     } catch (err) {
-      console.error('[handleQuickCreate]', err)
+      // #27: Hiển thị lỗi rõ ràng thay vì swallow
+      showNotification(`Không thể tạo công việc: ${err.message || 'Lỗi không xác định'}`)
     }
   }
 
@@ -168,8 +175,6 @@ export default function TimerPage() {
     setNotification(null)
     expiredHandledRef.current = false
     try {
-      // Nếu không đặt thời lượng → gửi null (stopwatch mode)
-      // Nếu đặt thời lượng → gửi số giây (countdown mode)
       const targetSeconds = hasTargetDuration ? durationMinutes * 60 : null
 
       const entry = await timerApi.start(token, {
@@ -178,14 +183,21 @@ export default function TimerPage() {
       })
       setActiveEntryId(entry.id)
 
-      if (hasTargetDuration) {
-        countdown.start(entry.target_duration, entry.start_time)
-      } else {
-        countdown.startUp(0)
+      try {
+        if (hasTargetDuration) {
+          countdown.start(entry.target_duration, entry.start_time)
+        } else {
+          countdown.startUp(entry.start_time)
+        }
+      } catch (timerErr) {
+        // Server trả start_time không hợp lệ (không nên xảy ra, nhưng handle an toàn)
+        console.error('[TimerPage handleStart] Invalid start_time:', timerErr)
+        showNotification('Timer đã tạo nhưng không thể hiển thị. Vui lòng tải lại trang.')
       }
     } catch (err) {
-      if (err.status === 409) setNotification('Bạn đã có bản ghi đang chạy.')
-      else setNotification('Không thể bắt đầu. Vui lòng thử lại.')
+      if (err.status === 409) showNotification('Bạn đã có bản ghi đang chạy.')
+      else if (err.status === 408) showNotification('Máy chủ không phản hồi. Vui lòng thử lại.')
+      else showNotification(`Không thể bắt đầu: ${err.message || 'Lỗi không xác định'}`)
     } finally {
       setStarting(false)
     }
@@ -194,28 +206,39 @@ export default function TimerPage() {
   // ─── Stop timer (thủ công) ────────────────────────────────────────────────
 
   async function handleStop() {
-    if (!activeEntryId) return
-    countdown.stop()
+    if (!activeEntryId || stopping) return
+    setStopping(true)
+    countdown.stop()  // tạm dừng UI timer ngay lập tức (không reset)
     try {
       await timerApi.stop(token)
+
+      // #18: Chỉ reset UI sau khi API THÀNH CÔNG
+      countdown.reset()
+      setActiveEntryId(null)
+      setHasTargetDuration(false)
+      const entries = await timeEntry.list(token, todayDate())
+      setTodayEntries(entries)
     } catch (err) {
+      // #18: API fail → KHÔNG reset. Timer UI đang pause, user có thể thử lại.
+      // Re-enable lại timer display bằng cách restart interval từ hiện tại
       console.warn('[handleStop]', err)
+      if (err.status === 408) {
+        showNotification('Máy chủ không phản hồi. Timer vẫn đang chạy — vui lòng thử lại.')
+      } else {
+        showNotification(`Không thể dừng timer: ${err.message || 'Lỗi không xác định'}`)
+      }
+      // Restore timer: gọi lại loadData để đồng bộ state từ server
+      await loadData().catch(() => {})
+    } finally {
+      setStopping(false)
     }
-    countdown.reset()
-    setActiveEntryId(null)
-    setHasTargetDuration(false)
-    const entries = await timeEntry.list(token, todayDate())
-    setTodayEntries(entries)
   }
 
   // ─── Derived ──────────────────────────────────────────────────────────────
 
-  const isRunning  = countdown.isRunning || countdown.isExpired
+  const isRunning  = countdown.isRunning
   const activeTask = tasks.find(t => t.id === Number(filterTaskId))
 
-  // Số giây hiển thị:
-  //   countdown mode → remaining (giảm dần)
-  //   stopwatch mode → elapsed  (tăng dần)
   const displaySeconds = hasTargetDuration
     ? countdown.remainingSeconds
     : countdown.elapsedSeconds
@@ -288,33 +311,6 @@ export default function TimerPage() {
               placeholder="Mô tả (tuỳ chọn)..."
               rows={2}
             />
-
-            {/* Mức độ ưu tiên */}
-            <div className={styles.prioritySection}>
-              <label className={styles.fieldLabel}>Mức độ ưu tiên</label>
-              <div className={styles.priorityBar}>
-                <div className={styles.priorityTrack} />
-                <div className={styles.priorityDots}>
-                  {PRIORITY_LEVELS.map(p => (
-                    <button
-                      key={p.value} type="button"
-                      className={`${styles.priorityDot} ${quickPriority === p.value ? styles.prioritySelected : ''}`}
-                      style={{ '--dot-color': p.hex }}
-                      onClick={() => setQuickPriority(p.value)}
-                      title={p.label}
-                    />
-                  ))}
-                </div>
-                <div className={styles.priorityEndLabels}>
-                  <span>Không vội</span>
-                  <span>Cấp thiết</span>
-                </div>
-              </div>
-              <p className={styles.priorityCurrent} style={{ color: getPriorityInfo(quickPriority).hex }}>
-                {getPriorityInfo(quickPriority).label}
-              </p>
-            </div>
-
             <div className={styles.quickActions}>
               <button type="submit" className={styles.quickSave}>Tạo &amp; chọn</button>
               <button type="button" className={styles.quickCancel}
@@ -328,7 +324,7 @@ export default function TimerPage() {
           <p className={styles.runningTitle}>
             <span
               className={styles.runningDot}
-              style={{ background: getPriorityInfo(activeTask.priority).hex }}
+              style={{ background: activeTask.color || '#4361EE' }}
             />
             {activeTask.title}
           </p>
@@ -346,7 +342,7 @@ export default function TimerPage() {
           </label>
         )}
 
-        {/* ── Picker thời lượng (chỉ hiện khi bật toggle và chưa chạy) ── */}
+        {/* ── Picker thời lượng ── */}
         {!isRunning && hasTargetDuration && (
           <div className={styles.durationRow}>
             <div className={styles.durationInputs}>
@@ -375,8 +371,14 @@ export default function TimerPage() {
         </div>
 
         {/* ── Nút Start / Stop ── */}
-        {isRunning ? (
-          <button className={styles.stopBtn} onClick={handleStop}>Dừng lại</button>
+        {isRunning || countdown.isExpired ? (
+          <button
+            className={styles.stopBtn}
+            onClick={handleStop}
+            disabled={stopping}
+          >
+            {stopping ? 'Đang dừng...' : 'Dừng lại'}
+          </button>
         ) : (
           <button
             className={styles.startBtn}
@@ -397,20 +399,18 @@ export default function TimerPage() {
         ) : (
           <ul className={styles.logList}>
             {displayedEntries.map(entry => {
-              const status = getEntryStatus(entry)
-              const pColor = getPriorityInfo(
-                tasks.find(t => t.id === entry.task_id)?.priority
-              ).hex
+              const status   = getEntryStatus(entry)
+              const dotColor = tasks.find(t => t.id === entry.task_id)?.color || '#4361EE'
               return (
                 <li key={entry.id} className={styles.logItem}>
-                  <span className={styles.dot} style={{ background: pColor }} />
+                  <span className={styles.dot} style={{ background: dotColor }} />
                   <span className={styles.logTask}>{entry.task_title || '—'}</span>
                   <span className={styles.logTime}>
-                    {entry.start_time?.slice(11, 16)}
-                    {entry.end_time ? ` – ${entry.end_time.slice(11, 16)}` : ''}
+                    {formatLocalTime(entry.start_time)}
+                    {entry.end_time ? ` – ${formatLocalTime(entry.end_time)}` : ''}
                   </span>
                   <span className={styles.logDuration}>
-                    {entry.duration ? formatDuration(entry.duration) : '—'}
+                    {entry.duration != null ? formatDuration(entry.duration) : '—'}
                   </span>
                   <span className={`${styles.statusBadge} ${styles[`status_${status}`]}`}>
                     {statusLabel(status)}

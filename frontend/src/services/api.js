@@ -14,18 +14,14 @@
  * - scheduledTask: các hàm liên quan đến lịch hẹn
  */
 
-// Đường dẫn cơ sở của API (tất cả request đều bắt đầu bằng /api)
 const BASE = '/api'
 
+// Timeout mặc định cho mọi request (ms).
+// Timer stop đặc biệt nhạy cảm: nếu treo quá lâu user không biết state nào là đúng.
+const DEFAULT_TIMEOUT_MS = 10_000
+
 /**
- * Tạo header (tiêu đề) cho request.
- * Nếu có token, thêm vào header để server biết ai đang gửi request.
- *
- * "Bearer token": chuẩn bảo mật phổ biến, server dùng token này
- * để xác định bạn là ai (giống như thẻ căn cước).
- *
- * @param {string} token - Token xác thực (lấy từ localStorage)
- * @returns {Object} Các header cho request
+ * Tạo header cho request.
  */
 function getHeaders(token) {
   const h = { 'Content-Type': 'application/json' }
@@ -36,100 +32,121 @@ function getHeaders(token) {
 /**
  * Hàm chung để gọi API.
  *
- * Cách hoạt động:
- * 1. Gửi request đến server
- * 2. Nếu server trả về 401 (không được phép), xóa token và quay về trang đăng nhập
- * 3. Đọc dữ liệu JSON từ phản hồi
- * 4. Nếu có lỗi, ném ra exception
+ * Thay đổi so với bản cũ:
+ * - #28: throw Error thực sự (có .stack, .status) thay vì plain object {}
+ * - #29: AbortController timeout — mặc định 10 giây
+ * - Dùng URLSearchParams cho query params thay vì string interpolation
  *
  * @param {string} endpoint - Đường dẫn API (VD: '/tasks')
- * @param {Object} options - Tùy chọn: method, token, body...
+ * @param {Object} options  - Tùy chọn: method, token, body, timeoutMs
  * @returns {Object} Dữ liệu JSON từ server
+ * @throws {Error} với .status nếu server trả lỗi, hoặc nếu timeout
  */
-export async function apiFetch(endpoint, { token, ...options } = {}) {
-  const res = await fetch(`${BASE}${endpoint}`, {
-    ...options,
-    headers: getHeaders(token)
-  })
-  // 401 = phiên đăng nhập hết hạn, phải đăng nhập lại
+export async function apiFetch(endpoint, { token, timeoutMs = DEFAULT_TIMEOUT_MS, ...options } = {}) {
+  // #29: Timeout qua AbortController
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
+  let res
+  try {
+    res = await fetch(`${BASE}${endpoint}`, {
+      ...options,
+      headers: getHeaders(token),
+      signal: controller.signal,
+    })
+  } catch (fetchErr) {
+    clearTimeout(timeoutId)
+    if (fetchErr.name === 'AbortError') {
+      const err = new Error('Request timeout — máy chủ không phản hồi')
+      err.status = 408
+      throw err
+    }
+    throw fetchErr
+  }
+  clearTimeout(timeoutId)
+
+  // 401 = phiên đăng nhập hết hạn
   if (res.status === 401) {
     localStorage.removeItem('token')
     window.location.href = '/login'
-    throw new Error('Phiên đăng nhập hết hạn')
+    const err = new Error('Phiên đăng nhập hết hạn')
+    err.status = 401
+    throw err
   }
-  // Chỉ parse JSON nếu Content-Type là application/json
-  // (tránh lỗi "Unexpected token '<'" khi server trả về trang HTML lỗi)
+
   const contentType = res.headers.get('content-type') || ''
   const data = contentType.includes('application/json') ? await res.json() : null
 
-  // Nếu status không phải 2xx, ném lỗi với thông điệp từ server
-  if (!res.ok) throw { message: data?.error || `HTTP ${res.status}`, status: res.status }
+  // #28: throw Error (có .stack + .status) thay vì plain object
+  if (!res.ok) {
+    const err = new Error(data?.error || `HTTP ${res.status}`)
+    err.status = res.status
+    throw err
+  }
   return data
 }
 
-// ============ CÁC NHÓM HÀM API ============
+// ─── Auth ─────────────────────────────────────────────────────────────────────
 
-// Xác thực: đăng ký, đăng nhập, lấy thông tin người dùng
 export const auth = {
-  // POST /api/auth/register - Đăng ký tài khoản mới
-  register: (body) => apiFetch('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
-  // POST /api/auth/login - Đăng nhập
-  login: (body) => apiFetch('/auth/login', { method: 'POST', body: JSON.stringify(body) }),
-  // GET /api/auth/me - Lấy thông tin người dùng hiện tại
-  me: (token) => apiFetch('/auth/me', { token }),
+  register: (body)  => apiFetch('/auth/register', { method: 'POST', body: JSON.stringify(body) }),
+  login:    (body)  => apiFetch('/auth/login',    { method: 'POST', body: JSON.stringify(body) }),
+  me:       (token) => apiFetch('/auth/me', { token }),
 }
 
-// Công việc: CRUD (Tạo, Đọc, Sửa, Xóa)
+// ─── Tasks ────────────────────────────────────────────────────────────────────
+
 export const task = {
-  // GET /api/tasks - Lấy danh sách công việc
-  list: (token) => apiFetch('/tasks', { token }),
-  // POST /api/tasks - Tạo công việc mới
-  create: (token, body) => apiFetch('/tasks', { token, method: 'POST', body: JSON.stringify(body) }),
-  // PUT /api/tasks/:id - Cập nhật công việc
+  list:   (token)           => apiFetch('/tasks', { token }),
+  create: (token, body)     => apiFetch('/tasks', { token, method: 'POST', body: JSON.stringify(body) }),
   update: (token, id, body) => apiFetch(`/tasks/${id}`, { token, method: 'PUT', body: JSON.stringify(body) }),
-  // DELETE /api/tasks/:id - Xóa công việc
-  delete: (token, id) => apiFetch(`/tasks/${id}`, { token, method: 'DELETE' }),
+  delete: (token, id)       => apiFetch(`/tasks/${id}`, { token, method: 'DELETE' }),
 }
 
-// Bản ghi thời gian (time entries): xem/chỉnh sửa lịch sử
-// LƯU Ý: Luồng Start/Stop dùng timer.start() và timer.stop() bên dưới,
-//         KHÔNG dùng timeEntry.create/update để tránh tạo duplicate entry.
+// ─── Time Entries ─────────────────────────────────────────────────────────────
+// Luồng Start/Stop dùng timer.start() / timer.stop().
+// timeEntry.create/update chỉ dùng cho manual history edit.
+
 export const timeEntry = {
-  // GET /api/time-entries?date=YYYY-MM-DD - Lấy bản ghi theo ngày
-  list: (token, date) => apiFetch(`/time-entries?date=${date}`, { token }),
-  // GET /api/time-entries?from=...&to=... - Lấy bản ghi theo khoảng ngày
-  listRange: (token, from, to) => apiFetch(`/time-entries?from=${from}&to=${to}`, { token }),
-  // GET /api/time-entries/stats?period=week - Lấy thống kê
-  stats: (token, period) => apiFetch(`/time-entries/stats?period=${period}`, { token }),
-  // POST /api/time-entries - Tạo bản ghi thủ công (dùng cho manual history, KHÔNG dùng khi bấm Start)
-  create: (token, body) => apiFetch('/time-entries', { token, method: 'POST', body: JSON.stringify(body) }),
-  // PUT /api/time-entries/:id - Chỉnh sửa bản ghi lịch sử (KHÔNG dùng khi bấm Stop)
+  list: (token, date) => {
+    // URLSearchParams: tránh XSS/encoding bugs khi value có ký tự đặc biệt
+    const params = new URLSearchParams({ date })
+    return apiFetch(`/time-entries?${params}`, { token })
+  },
+  listRange: (token, from, to) => {
+    const params = new URLSearchParams({ from, to })
+    return apiFetch(`/time-entries?${params}`, { token })
+  },
+  stats: (token, period) => {
+    const params = new URLSearchParams({ period })
+    return apiFetch(`/time-entries/stats?${params}`, { token })
+  },
+  create: (token, body)     => apiFetch('/time-entries', { token, method: 'POST', body: JSON.stringify(body) }),
   update: (token, id, body) => apiFetch(`/time-entries/${id}`, { token, method: 'PUT', body: JSON.stringify(body) }),
-  // DELETE /api/time-entries/:id - Xóa bản ghi
-  delete: (token, id) => apiFetch(`/time-entries/${id}`, { token, method: 'DELETE' }),
+  delete: (token, id)       => apiFetch(`/time-entries/${id}`, { token, method: 'DELETE' }),
 }
 
-// Timer: bắt đầu / lấy timer đang chạy / dừng
-// Dùng endpoint /api/timer thay vì /api/time-entries để tách biệt logic countdown
+// ─── Timer ────────────────────────────────────────────────────────────────────
+
 export const timer = {
-  // POST /api/timer/start — gửi { task_id, target_duration (giây) }
-  start: (token, body) => apiFetch('/timer/start', { token, method: 'POST', body: JSON.stringify(body) }),
-  // GET /api/timer/active — lấy timer đang chạy (có start_time, target_duration)
-  active: (token) => apiFetch('/timer/active', { token }),
-  // POST /api/timer/stop — dừng timer, backend tự tính actual duration
-  stop: (token) => apiFetch('/timer/stop', { token, method: 'POST' }),
+  start:  (token, body) => apiFetch('/timer/start',  { token, method: 'POST', body: JSON.stringify(body) }),
+  active: (token)       => apiFetch('/timer/active', { token }),
+  // Stop có timeout riêng ngắn hơn — user cần biết kết quả sớm để quyết định retry
+  stop:   (token)       => apiFetch('/timer/stop',   { token, method: 'POST', timeoutMs: 8_000 }),
 }
 
-// Lịch hẹn (scheduled tasks): lên kế hoạch trước cho tương lai
+// ─── Scheduled Tasks ─────────────────────────────────────────────────────────
+
 export const scheduledTask = {
-  // GET /api/scheduled-tasks?date=YYYY-MM-DD - Lấy lịch hẹn theo ngày
-  list: (token, date) => apiFetch(`/scheduled-tasks?date=${date}`, { token }),
-  // GET /api/scheduled-tasks?from=...&to=... - Lấy lịch hẹn theo khoảng ngày
-  listRange: (token, from, to) => apiFetch(`/scheduled-tasks?from=${from}&to=${to}`, { token }),
-  // POST /api/scheduled-tasks - Tạo lịch hẹn mới
-  create: (token, body) => apiFetch('/scheduled-tasks', { token, method: 'POST', body: JSON.stringify(body) }),
-  // PUT /api/scheduled-tasks/:id - Cập nhật lịch hẹn
+  list: (token, date) => {
+    const params = new URLSearchParams({ date })
+    return apiFetch(`/scheduled-tasks?${params}`, { token })
+  },
+  listRange: (token, from, to) => {
+    const params = new URLSearchParams({ from, to })
+    return apiFetch(`/scheduled-tasks?${params}`, { token })
+  },
+  create: (token, body)     => apiFetch('/scheduled-tasks', { token, method: 'POST', body: JSON.stringify(body) }),
   update: (token, id, body) => apiFetch(`/scheduled-tasks/${id}`, { token, method: 'PUT', body: JSON.stringify(body) }),
-  // DELETE /api/scheduled-tasks/:id - Xóa lịch hẹn
-  delete: (token, id) => apiFetch(`/scheduled-tasks/${id}`, { token, method: 'DELETE' }),
+  delete: (token, id)       => apiFetch(`/scheduled-tasks/${id}`, { token, method: 'DELETE' }),
 }

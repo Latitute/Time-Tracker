@@ -1,41 +1,29 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useAuth } from '../context/AuthContext.jsx'
-import { task as taskApi, timeEntry } from '../services/api.js'
-import { formatDuration } from '../utils/format-time.js'
+import { task as taskApi, timeEntry as teApi } from '../services/api.js'
+import { formatDuration, formatLocalTime, localDateRange } from '../utils/format-time.js'
 import styles from './TasksPage.module.css'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const PRIORITY_LEVELS = [
-  { value: 1, hex: '#4895EF', label: 'Không vội'   },
-  { value: 2, hex: '#06D6A0', label: 'Bình thường'  },
-  { value: 3, hex: '#FFD166', label: 'Quan trọng'   },
-  { value: 4, hex: '#FB5607', label: 'Gấp'          },
-  { value: 5, hex: '#EF476F', label: 'Cấp thiết'    },
-]
-
 const SORT_OPTIONS = [
-  { key: 'title',      label: 'Tên'                 },
-  { key: 'created_at', label: 'Thời gian tạo'       },
-  { key: 'start_time', label: 'Thời gian bắt đầu'  },
-  { key: 'end_time',   label: 'Thời gian kết thúc' },
-  { key: 'priority',   label: 'Mức ưu tiên'         },
+  { key: 'title',      label: 'Tên'                },
+  { key: 'created_at', label: 'Thời gian tạo'      },
+  { key: 'start_time', label: 'Thời gian bắt đầu' },
+  { key: 'end_time',   label: 'Thời gian kết thúc'},
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getPriorityInfo(value = 1) {
-  return PRIORITY_LEVELS.find(p => p.value === value) || PRIORITY_LEVELS[0]
-}
-
-function getTaskStatus(task, latestEntry) {
+function getTaskStatus(latestEntry) {
   if (!latestEntry) return 'Chưa bắt đầu'
   if (!latestEntry.end_time) return 'Đang thực hiện'
   return 'Đã kết thúc'
 }
 
-function getStatusClass(task, latestEntry) {
-  if (!latestEntry) return 'upcoming'
+function getStatusClass(latestEntry) {
+  // #24: dùng 'not_started' thay vì 'upcoming' để khớp với tên thực tế của trạng thái
+  if (!latestEntry) return 'not_started'
   if (!latestEntry.end_time) return 'running'
   return 'done'
 }
@@ -46,18 +34,22 @@ export default function TasksPage() {
   const { token } = useAuth()
 
   const [tasks, setTasks]         = useState([])
-  const [entries, setEntries]     = useState([]) // tất cả time_entries
+  const [entries, setEntries]     = useState([])
   const [showForm, setShowForm]   = useState(false)
   const [editTask, setEditTask]   = useState(null)
+
+  // Form feedback
+  const [saving, setSaving]   = useState(false)
+  const [deleting, setDeleting] = useState(null)  // task id đang xóa
+  const [formError, setFormError] = useState(null)
 
   // Form fields
   const [title, setTitle]             = useState('')
   const [description, setDescription] = useState('')
-  const [priority, setPriority]       = useState(1)
 
   // Sort
-  const [sortBy, setSortBy]         = useState('created_at')
-  const [sortDir, setSortDir]       = useState('asc')  // 'asc' | 'desc'
+  const [sortBy, setSortBy]             = useState('created_at')
+  const [sortDir, setSortDir]           = useState('asc')
   const [showSortMenu, setShowSortMenu] = useState(false)
   const sortMenuRef = useRef(null)
 
@@ -69,7 +61,6 @@ export default function TasksPage() {
     try {
       const [taskList, entryList] = await Promise.all([
         taskApi.list(token),
-        // Lấy 30 ngày gần nhất để có đủ dữ liệu
         fetchRecentEntries(),
       ])
       setTasks(taskList)
@@ -80,56 +71,59 @@ export default function TasksPage() {
   }
 
   async function fetchRecentEntries() {
-    // Lấy từ ngày 30 ngày trước đến hôm nay
-    const to = new Date()
-    const from = new Date()
-    from.setDate(from.getDate() - 30)
-    const fmt = d => d.toISOString().slice(0, 10)
+    const { from, to } = localDateRange(30)
     try {
-      const { timeEntry: teApi } = await import('../services/api.js')
-      return await teApi.listRange(token, fmt(from), fmt(to))
+      return await teApi.listRange(token, from, to)
     } catch {
       return []
     }
   }
 
-  // ─── Lấy entry mới nhất của task ──────────────────────────────────────────
+  // ─── Lấy entry mới nhất của từng task — O(n) với Map ─────────────────────
+  // #23: useMemo + Map thay vì gọi filter().sort() N lần trong render
 
-  function getLatestEntry(taskId) {
-    const taskEntries = entries
-      .filter(e => e.task_id === taskId)
-      .sort((a, b) => new Date(b.start_time) - new Date(a.start_time))
-    return taskEntries[0] || null
-  }
+  const latestEntryByTask = useMemo(() => {
+    const map = new Map()
+    for (const entry of entries) {
+      const current = map.get(entry.task_id)
+      // So sánh bằng chuỗi — start_time là UTC ISO nên sort lexicographically đúng
+      if (!current || entry.start_time > current.start_time) {
+        map.set(entry.task_id, entry)
+      }
+    }
+    return map
+  }, [entries])
 
   // ─── Sort tasks ────────────────────────────────────────────────────────────
 
-  const sortedTasks = [...tasks].sort((a, b) => {
-    let va, vb
-    const ea = getLatestEntry(a.id)
-    const eb = getLatestEntry(b.id)
+  const sortedTasks = useMemo(() => {
+    return [...tasks].sort((a, b) => {
+      const ea = latestEntryByTask.get(a.id)
+      const eb = latestEntryByTask.get(b.id)
+      let va, vb
 
-    switch (sortBy) {
-      case 'title':
-        va = a.title.toLowerCase(); vb = b.title.toLowerCase()
-        return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
-      case 'priority':
-        va = a.priority ?? 1; vb = b.priority ?? 1
-        break
-      case 'start_time':
-        va = ea ? new Date(ea.start_time) : new Date(0)
-        vb = eb ? new Date(eb.start_time) : new Date(0)
-        break
-      case 'end_time':
-        va = ea?.end_time ? new Date(ea.end_time) : new Date(0)
-        vb = eb?.end_time ? new Date(eb.end_time) : new Date(0)
-        break
-      default: // created_at
-        va = new Date(a.created_at || 0)
-        vb = new Date(b.created_at || 0)
-    }
-    return sortDir === 'asc' ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1)
-  })
+      switch (sortBy) {
+        case 'title':
+          va = a.title.toLowerCase(); vb = b.title.toLowerCase()
+          return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va)
+        case 'start_time':
+          va = ea ? new Date(ea.start_time) : new Date(0)
+          vb = eb ? new Date(eb.start_time) : new Date(0)
+          break
+        case 'end_time':
+          va = ea?.end_time ? new Date(ea.end_time) : new Date(0)
+          vb = eb?.end_time ? new Date(eb.end_time) : new Date(0)
+          break
+        default: // created_at
+          va = new Date(a.created_at || 0)
+          vb = new Date(b.created_at || 0)
+      }
+      // #24 (sort): return 0 khi bằng nhau để sort stable
+      if (va < vb) return sortDir === 'asc' ? -1 : 1
+      if (va > vb) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+  }, [tasks, sortBy, sortDir, latestEntryByTask])
 
   // ─── Click outside sort menu ──────────────────────────────────────────────
 
@@ -147,7 +141,8 @@ export default function TasksPage() {
 
   function openAdd() {
     setEditTask(null)
-    setTitle(''); setDescription(''); setPriority(1)
+    setTitle(''); setDescription('')
+    setFormError(null)
     setShowForm(true)
   }
 
@@ -155,28 +150,45 @@ export default function TasksPage() {
     setEditTask(t)
     setTitle(t.title)
     setDescription(t.description || '')
-    setPriority(t.priority || 1)
+    setFormError(null)
     setShowForm(true)
   }
 
+  // #26: handleSave với loading state và error handling
   async function handleSave(e) {
     e.preventDefault()
     if (!title.trim()) return
-    const pInfo = getPriorityInfo(priority)
-    const body = { title: title.trim(), description: description.trim(), priority, color: pInfo.hex }
-    if (editTask) {
-      await taskApi.update(token, editTask.id, body)
-    } else {
-      await taskApi.create(token, body)
+    setSaving(true)
+    setFormError(null)
+    const body = { title: title.trim(), description: description.trim() }
+    try {
+      if (editTask) {
+        await taskApi.update(token, editTask.id, body)
+      } else {
+        await taskApi.create(token, body)
+      }
+      setShowForm(false)
+      await loadAll()
+    } catch (err) {
+      setFormError(err.message || 'Lỗi không xác định. Vui lòng thử lại.')
+    } finally {
+      setSaving(false)
     }
-    setShowForm(false)
-    loadAll()
   }
 
+  // #26: handleDelete với loading state và error handling
   async function handleDelete(id) {
     if (!confirm('Xác nhận xóa công việc này?')) return
-    await taskApi.delete(token, id)
-    loadAll()
+    setDeleting(id)
+    try {
+      await taskApi.delete(token, id)
+      await loadAll()
+    } catch (err) {
+      // Hiển thị lỗi inline — 409 = timer đang chạy, nên thông báo rõ
+      alert(err.message || 'Không thể xóa công việc. Vui lòng thử lại.')
+    } finally {
+      setDeleting(null)
+    }
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -188,7 +200,7 @@ export default function TasksPage() {
       <div className={styles.header}>
         <h2>Công việc</h2>
         <div className={styles.headerActions}>
-          {/* Nút sort — hình tam giác */}
+          {/* Nút sort */}
           <div className={styles.sortWrapper} ref={sortMenuRef}>
             <button
               className={styles.sortTrigger}
@@ -243,33 +255,15 @@ export default function TasksPage() {
               placeholder="Mô tả ngắn (tuỳ chọn)" rows={2} />
           </div>
 
-          {/* Mức ưu tiên */}
-          <div className={styles.field}>
-            <label>Mức độ ưu tiên</label>
-            <div className={styles.priorityBar}>
-              <div className={styles.priorityTrack} />
-              <div className={styles.priorityDots}>
-                {PRIORITY_LEVELS.map(p => (
-                  <button key={p.value} type="button"
-                    className={`${styles.priorityDot} ${priority === p.value ? styles.prioritySelected : ''}`}
-                    style={{ '--dot-color': p.hex }}
-                    onClick={() => setPriority(p.value)}
-                    title={p.label}
-                  />
-                ))}
-              </div>
-              <div className={styles.priorityEndLabels}>
-                <span>Không vội</span>
-                <span>Cấp thiết</span>
-              </div>
-            </div>
-            <p className={styles.priorityCurrent} style={{ color: getPriorityInfo(priority).hex }}>
-              {getPriorityInfo(priority).label}
-            </p>
-          </div>
+          {/* #26: Hiển thị lỗi từ server */}
+          {formError && (
+            <p className={styles.formError}>{formError}</p>
+          )}
 
           <div className={styles.formActions}>
-            <button type="submit" className={styles.saveBtn}>Lưu</button>
+            <button type="submit" className={styles.saveBtn} disabled={saving}>
+              {saving ? 'Đang lưu...' : 'Lưu'}
+            </button>
             <button type="button" className={styles.cancelBtn}
               onClick={() => setShowForm(false)}>Huỷ</button>
           </div>
@@ -283,23 +277,33 @@ export default function TasksPage() {
 
       <ul className={styles.taskList}>
         {sortedTasks.map(t => {
-          const pInfo     = getPriorityInfo(t.priority)
-          const latestEntry = getLatestEntry(t.id)
-          const status    = getTaskStatus(t, latestEntry)
-          const statusCls = getStatusClass(t, latestEntry)
+          const latestEntry = latestEntryByTask.get(t.id) || null
+          const status      = getTaskStatus(latestEntry)
+          const statusCls   = getStatusClass(latestEntry)
+          const isBeingDeleted = deleting === t.id
 
           return (
             <li key={t.id} className={styles.taskCard}>
-              {/* Hàng trên: chấm ưu tiên + tên + badge trạng thái + nút */}
+              {/* Hàng trên: chấm màu + tên + badge trạng thái + nút */}
               <div className={styles.taskTop}>
-                <span className={styles.dot} style={{ background: pInfo.hex }} title={pInfo.label} />
+                <span
+                  className={styles.dot}
+                  style={{ background: t.color || '#4361EE' }}
+                />
                 <span className={styles.taskTitle}>{t.title}</span>
+                {/* #24: class 'not_started' thay vì 'upcoming' */}
                 <span className={`${styles.statusBadge} ${styles[`status_${statusCls}`]}`}>
                   {status}
                 </span>
                 <div className={styles.taskActions}>
                   <button className={styles.editBtn} onClick={() => openEdit(t)}>Sửa</button>
-                  <button className={styles.deleteBtn} onClick={() => handleDelete(t.id)}>Xóa</button>
+                  <button
+                    className={styles.deleteBtn}
+                    onClick={() => handleDelete(t.id)}
+                    disabled={isBeingDeleted}
+                  >
+                    {isBeingDeleted ? '...' : 'Xóa'}
+                  </button>
                 </div>
               </div>
 
@@ -312,19 +316,16 @@ export default function TasksPage() {
               <div className={styles.taskMeta}>
                 <span className={styles.metaItem}>
                   <span className={styles.metaLabel}>Bắt đầu:</span>
-                  {latestEntry?.start_time?.slice(11, 16) || '—'}
+                  {formatLocalTime(latestEntry?.start_time) || '—'}
                 </span>
                 <span className={styles.metaItem}>
                   <span className={styles.metaLabel}>Kết thúc:</span>
-                  {latestEntry?.end_time?.slice(11, 16) || '—'}
+                  {formatLocalTime(latestEntry?.end_time) || '—'}
                 </span>
                 <span className={styles.metaItem}>
                   <span className={styles.metaLabel}>Thời lượng:</span>
-                  {latestEntry?.duration ? formatDuration(latestEntry.duration) : '—'}
-                </span>
-                <span className={styles.metaItem}>
-                  <span className={styles.metaLabel}>Ưu tiên:</span>
-                  <span style={{ color: pInfo.hex, fontWeight: 600 }}>{pInfo.label}</span>
+                  {/* duration=0 hiện "0s" thay vì '—' */}
+                  {latestEntry?.duration != null ? formatDuration(latestEntry.duration) : '—'}
                 </span>
               </div>
             </li>
