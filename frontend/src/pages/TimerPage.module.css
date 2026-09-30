@@ -1,6 +1,6 @@
 .page { max-width: 600px; margin: 0 auto; }
 
-/* ── Notification ────────────────────────────────────────────────────────────── */
+
 .notification {
   display: flex; align-items: center; justify-content: space-between;
   gap: var(--space-3);
@@ -21,7 +21,7 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Timer section ───────────────────────────────────────────────────────────── */
+
 .timerSection { text-align: center; padding: var(--space-8) 0; }
 
 .runningTitle {
@@ -33,7 +33,7 @@
 }
 .runningDot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
-/* ── Task selector ───────────────────────────────────────────────────────────── */
+
 .taskRow {
   display: flex; justify-content: center; align-items: center;
   gap: var(--space-2); max-width: 340px; margin: 0 auto var(--space-4);
@@ -57,7 +57,7 @@
 }
 .quickBtn:hover { background: var(--color-surface); }
 
-/* ── Quick form ──────────────────────────────────────────────────────────────── */
+
 .quickForm {
   max-width: 360px; margin: 0 auto var(--space-4);
   background: var(--color-bg); border: 1px solid var(--color-border);
@@ -86,7 +86,7 @@
 }
 .fieldLabel { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: block; }
 
-/* Toggle đếm xuôi / ngược */
+
 .modeRow { display: flex; flex-direction: column; gap: var(--space-1); }
 .modeLabel { font-size: var(--text-xs); font-weight: 600; color: var(--color-text-secondary); }
 .modeToggle { display: flex; gap: var(--space-2); }
@@ -102,7 +102,7 @@
   color: #fff; font-weight: 600;
 }
 
-/* Duration row */
+
 .durationRow { display: flex; flex-direction: column; gap: var(--space-2); }
 .durationInputs { display: flex; align-items: center; gap: var(--space-2); }
 .durationNumber {
@@ -129,18 +129,18 @@
   color: #fff; font-weight: 600;
 }
 
-/* ── Priority bar ─────────────────────────────────────────────────────────── */
+
 .prioritySection { display: flex; flex-direction: column; gap: var(--space-1); }
 .priorityBar { position: relative; padding: var(--space-2) 0; }
 
-/* Đường gradient nền */
+
 .priorityTrack {
   height: 6px; border-radius: 3px;
   background: linear-gradient(to right, #4895EF, #06D6A0, #FFD166, #FB5607, #EF476F);
   margin: 14px 10px 6px;
 }
 
-/* Các nút chọn mức ưu tiên */
+
 .priorityDots {
   position: absolute; top: 0; left: 0; right: 0;
   display: flex; justify-content: space-between;
@@ -159,7 +159,7 @@
   box-shadow: 0 0 0 2px var(--dot-color, #ccc);
 }
 
-/* Labels "Không vội" / "Cấp thiết" */
+
 .priorityEndLabels {
   display: flex; justify-content: space-between;
   font-size: var(--text-xs); color: var(--color-text-secondary);
@@ -171,7 +171,7 @@
   text-align: center; margin: 0; transition: color 0.3s;
 }
 
-/* ── Time fields ─────────────────────────────────────────────────────────── */
+
 .timeFields { display: flex; gap: var(--space-3); }
 .timeField { flex: 1; display: flex; flex-direction: column; gap: 4px; }
 .timeInput {
@@ -184,7 +184,7 @@
   box-shadow: 0 0 0 3px rgba(67,97,238,0.15);
 }
 
-/* Quick form actions */
+
 .quickActions { display: flex; gap: var(--space-2); justify-content: flex-end; }
 .quickSave {
   background: var(--color-success); color: #fff; border: none;
@@ -198,7 +198,7 @@
   padding: var(--space-2) var(--space-4); cursor: pointer; font-size: var(--text-sm);
 }
 
-/* ── Timer display ───────────────────────────────────────────────────────── */
+
 .timerDisplay {
   font-family: var(--font-mono); font-size: var(--text-timer);
   font-weight: 700; color: var(--color-text);
@@ -212,7 +212,7 @@
   0%, 100% { opacity: 1; } 50% { opacity: 0.55; }
 }
 
-/* ── Start / Stop buttons ────────────────────────────────────────────────── */
+
 .startBtn, .stopBtn {
   width: 100%; max-width: 300px; height: 48px;
   border: none; border-radius: var(--radius-md);
@@ -224,7 +224,7 @@
 .stopBtn  { background: var(--color-danger); color: #fff; }
 .stopBtn:hover { filter: brightness(0.9); }
 
-/* ── Log section ─────────────────────────────────────────────────────────── */
+
 .logSection {
   background: var(--color-bg); border: 1px solid var(--color-border);
   border-radius: var(--radius-lg); padding: var(--space-6);
@@ -251,7 +251,7 @@
 .logTime  { color: var(--color-text-secondary); white-space: nowrap; font-size: var(--text-xs); }
 .logDuration { font-family: var(--font-mono); font-weight: 600; color: var(--color-primary); white-space: nowrap; font-size: var(--text-xs); }
 
-/* Status badges */
+
 .statusBadge {
   flex-shrink: 0; padding: 2px 8px; border-radius: 99px;
   font-size: 10px; font-weight: 600; white-space: nowrap;
@@ -260,7 +260,7 @@
 .status_running  { background: #dbeafe; color: #1e40af; }
 .status_upcoming { background: #f3f4f6; color: #6b7280; }
 
-/* ── Responsive ──────────────────────────────────────────────────────────── */
+
 @media (max-width: 768px) {
   .timerDisplay { font-size: 2.5rem; }
   .startBtn, .stopBtn { max-width: 100%; }

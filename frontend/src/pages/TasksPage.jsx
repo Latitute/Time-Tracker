@@ -4,16 +4,12 @@ import { task as taskApi, timeEntry as teApi } from '../services/api.js'
 import { formatDuration, formatLocalTime, localDateRange } from '../utils/format-time.js'
 import styles from './TasksPage.module.css'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const SORT_OPTIONS = [
   { key: 'title',      label: 'Tên'                },
   { key: 'created_at', label: 'Thời gian tạo'      },
   { key: 'start_time', label: 'Thời gian bắt đầu' },
   { key: 'end_time',   label: 'Thời gian kết thúc'},
 ]
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getTaskStatus(latestEntry) {
   if (!latestEntry) return 'Chưa bắt đầu'
@@ -22,13 +18,10 @@ function getTaskStatus(latestEntry) {
 }
 
 function getStatusClass(latestEntry) {
-  // #24: dùng 'not_started' thay vì 'upcoming' để khớp với tên thực tế của trạng thái
   if (!latestEntry) return 'not_started'
   if (!latestEntry.end_time) return 'running'
   return 'done'
 }
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function TasksPage() {
   const { token } = useAuth()
@@ -38,22 +31,17 @@ export default function TasksPage() {
   const [showForm, setShowForm]   = useState(false)
   const [editTask, setEditTask]   = useState(null)
 
-  // Form feedback
-  const [saving, setSaving]   = useState(false)
-  const [deleting, setDeleting] = useState(null)  // task id đang xóa
+  const [saving, setSaving]       = useState(false)
+  const [deleting, setDeleting]   = useState(null)
   const [formError, setFormError] = useState(null)
 
-  // Form fields
   const [title, setTitle]             = useState('')
   const [description, setDescription] = useState('')
 
-  // Sort
   const [sortBy, setSortBy]             = useState('created_at')
   const [sortDir, setSortDir]           = useState('asc')
   const [showSortMenu, setShowSortMenu] = useState(false)
   const sortMenuRef = useRef(null)
-
-  // ─── Load ─────────────────────────────────────────────────────────────────
 
   useEffect(() => { loadAll() }, [token])
 
@@ -79,22 +67,16 @@ export default function TasksPage() {
     }
   }
 
-  // ─── Lấy entry mới nhất của từng task — O(n) với Map ─────────────────────
-  // #23: useMemo + Map thay vì gọi filter().sort() N lần trong render
-
   const latestEntryByTask = useMemo(() => {
     const map = new Map()
     for (const entry of entries) {
       const current = map.get(entry.task_id)
-      // So sánh bằng chuỗi — start_time là UTC ISO nên sort lexicographically đúng
       if (!current || entry.start_time > current.start_time) {
         map.set(entry.task_id, entry)
       }
     }
     return map
   }, [entries])
-
-  // ─── Sort tasks ────────────────────────────────────────────────────────────
 
   const sortedTasks = useMemo(() => {
     return [...tasks].sort((a, b) => {
@@ -114,18 +96,16 @@ export default function TasksPage() {
           va = ea?.end_time ? new Date(ea.end_time) : new Date(0)
           vb = eb?.end_time ? new Date(eb.end_time) : new Date(0)
           break
-        default: // created_at
+        default:
           va = new Date(a.created_at || 0)
           vb = new Date(b.created_at || 0)
       }
-      // #24 (sort): return 0 khi bằng nhau để sort stable
+
       if (va < vb) return sortDir === 'asc' ? -1 : 1
       if (va > vb) return sortDir === 'asc' ? 1 : -1
       return 0
     })
   }, [tasks, sortBy, sortDir, latestEntryByTask])
-
-  // ─── Click outside sort menu ──────────────────────────────────────────────
 
   useEffect(() => {
     function handler(e) {
@@ -136,8 +116,6 @@ export default function TasksPage() {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
-
-  // ─── Form handlers ────────────────────────────────────────────────────────
 
   function openAdd() {
     setEditTask(null)
@@ -154,7 +132,6 @@ export default function TasksPage() {
     setShowForm(true)
   }
 
-  // #26: handleSave với loading state và error handling
   async function handleSave(e) {
     e.preventDefault()
     if (!title.trim()) return
@@ -176,7 +153,6 @@ export default function TasksPage() {
     }
   }
 
-  // #26: handleDelete với loading state và error handling
   async function handleDelete(id) {
     if (!confirm('Xác nhận xóa công việc này?')) return
     setDeleting(id)
@@ -184,23 +160,18 @@ export default function TasksPage() {
       await taskApi.delete(token, id)
       await loadAll()
     } catch (err) {
-      // Hiển thị lỗi inline — 409 = timer đang chạy, nên thông báo rõ
       alert(err.message || 'Không thể xóa công việc. Vui lòng thử lại.')
     } finally {
       setDeleting(null)
     }
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
-
   return (
     <div className={styles.page}>
 
-      {/* Header */}
       <div className={styles.header}>
         <h2>Công việc</h2>
         <div className={styles.headerActions}>
-          {/* Nút sort */}
           <div className={styles.sortWrapper} ref={sortMenuRef}>
             <button
               className={styles.sortTrigger}
@@ -239,7 +210,6 @@ export default function TasksPage() {
         </div>
       </div>
 
-      {/* Form thêm / sửa */}
       {showForm && (
         <form className={styles.form} onSubmit={handleSave}>
           <div className={styles.field}>
@@ -255,7 +225,6 @@ export default function TasksPage() {
               placeholder="Mô tả ngắn (tuỳ chọn)" rows={2} />
           </div>
 
-          {/* #26: Hiển thị lỗi từ server */}
           {formError && (
             <p className={styles.formError}>{formError}</p>
           )}
@@ -270,7 +239,6 @@ export default function TasksPage() {
         </form>
       )}
 
-      {/* Danh sách tasks */}
       {sortedTasks.length === 0 && !showForm && (
         <p className={styles.empty}>Chưa có công việc nào. Nhấn "+ Thêm" để bắt đầu.</p>
       )}
@@ -284,14 +252,12 @@ export default function TasksPage() {
 
           return (
             <li key={t.id} className={styles.taskCard}>
-              {/* Hàng trên: chấm màu + tên + badge trạng thái + nút */}
               <div className={styles.taskTop}>
                 <span
                   className={styles.dot}
                   style={{ background: t.color || '#4361EE' }}
                 />
                 <span className={styles.taskTitle}>{t.title}</span>
-                {/* #24: class 'not_started' thay vì 'upcoming' */}
                 <span className={`${styles.statusBadge} ${styles[`status_${statusCls}`]}`}>
                   {status}
                 </span>
@@ -307,12 +273,10 @@ export default function TasksPage() {
                 </div>
               </div>
 
-              {/* Mô tả */}
               {t.description && (
                 <p className={styles.taskDesc}>{t.description}</p>
               )}
 
-              {/* Hàng dưới: thời gian + thời lượng */}
               <div className={styles.taskMeta}>
                 <span className={styles.metaItem}>
                   <span className={styles.metaLabel}>Bắt đầu:</span>
@@ -324,7 +288,6 @@ export default function TasksPage() {
                 </span>
                 <span className={styles.metaItem}>
                   <span className={styles.metaLabel}>Thời lượng:</span>
-                  {/* duration=0 hiện "0s" thay vì '—' */}
                   {latestEntry?.duration != null ? formatDuration(latestEntry.duration) : '—'}
                 </span>
               </div>

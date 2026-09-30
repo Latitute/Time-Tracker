@@ -5,17 +5,12 @@ import pool from '../config/db.js'
 const router = Router()
 router.use(authMiddleware)
 
-// ─── Validation ────────────────────────────────────────────────────────────────
-
 const VALID_CATEGORIES = ['STUDY', 'WORK', 'READING', 'SOCIAL', 'ENTERTAINMENT', 'EXERCISE', 'REST', 'OTHERS']
 
-/** Validate #RRGGBB hex color. null/undefined = optional (skip). */
 function isValidHexColor(val) {
   if (val == null) return true
   return typeof val === 'string' && /^#[0-9A-Fa-f]{6}$/.test(val)
 }
-
-// ─── GET /api/tasks ───────────────────────────────────────────────────────────
 
 router.get('/', async (req, res) => {
   try {
@@ -29,13 +24,9 @@ router.get('/', async (req, res) => {
   }
 })
 
-// ─── POST /api/tasks ──────────────────────────────────────────────────────────
-
 router.post('/', async (req, res) => {
   try {
     const { title, description, color, category } = req.body
-
-    // ── Validation ────────────────────────────────────────────────────────────
     if (!title?.trim()) {
       return res.status(400).json({ error: 'Tên công việc không được để trống' })
     }
@@ -48,7 +39,6 @@ router.post('/', async (req, res) => {
     if (color !== undefined && !isValidHexColor(color)) {
       return res.status(400).json({ error: 'color không hợp lệ (cần #RRGGBB, VD: #4361EE)' })
     }
-    // #8: category sai → 400, không silently fallback
     if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({
         error: `category không hợp lệ. Chọn một trong: ${VALID_CATEGORIES.join(', ')}`,
@@ -73,8 +63,6 @@ router.post('/', async (req, res) => {
   }
 })
 
-// ─── PUT /api/tasks/:id ───────────────────────────────────────────────────────
-
 router.put('/:id', async (req, res) => {
   try {
     const [existing] = await pool.execute(
@@ -87,7 +75,6 @@ router.put('/:id', async (req, res) => {
 
     const { title, description, color, category, is_active } = req.body
 
-    // ── Validation ────────────────────────────────────────────────────────────
     if (title !== undefined && !title?.trim()) {
       return res.status(400).json({ error: 'Tên công việc không được để trống' })
     }
@@ -100,19 +87,14 @@ router.put('/:id', async (req, res) => {
     if (color !== undefined && !isValidHexColor(color)) {
       return res.status(400).json({ error: 'color không hợp lệ (cần #RRGGBB)' })
     }
-    // #8: category sai → 400, không silently giữ cũ
     if (category !== undefined && !VALID_CATEGORIES.includes(category)) {
       return res.status(400).json({
         error: `category không hợp lệ. Chọn một trong: ${VALID_CATEGORIES.join(', ')}`,
       })
     }
-    // #9: is_active phải là boolean
     if (is_active !== undefined && typeof is_active !== 'boolean') {
       return res.status(400).json({ error: 'is_active phải là boolean' })
     }
-
-    // #11: Không cho phép archive task đang có timer chạy
-    // Kiểm tra này chỉ cần khi is_active đang được set về FALSE
     if (is_active === false && existing[0].is_active) {
       const [activeEntry] = await pool.execute(
         'SELECT id FROM time_entries WHERE task_id = ? AND end_time IS NULL LIMIT 1',
@@ -144,12 +126,8 @@ router.put('/:id', async (req, res) => {
   }
 })
 
-// ─── DELETE /api/tasks/:id ────────────────────────────────────────────────────
-// Soft-delete: is_active = FALSE. Atomic single query với affectedRows check.
-
 router.delete('/:id', async (req, res) => {
   try {
-    // #11: Không cho archive task đang chạy timer
     const [activeEntry] = await pool.execute(
       'SELECT id FROM time_entries WHERE task_id = ? AND end_time IS NULL LIMIT 1',
       [req.params.id]
@@ -160,7 +138,6 @@ router.delete('/:id', async (req, res) => {
       })
     }
 
-    // Single query: kiểm tra ownership VÀ delete trong cùng một statement
     const [result] = await pool.execute(
       'UPDATE tasks SET is_active = FALSE WHERE id = ? AND user_id = ?',
       [req.params.id, req.user.id]

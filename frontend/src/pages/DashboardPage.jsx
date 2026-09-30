@@ -3,8 +3,8 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { timeEntry } from '../services/api.js'
 import { formatDuration } from '../utils/format-time.js'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,        // Biểu đồ cột
-  ResponsiveContainer, PieChart, Pie, Cell,      // Biểu đồ tròn
+  BarChart, Bar, XAxis, YAxis, Tooltip,        
+  ResponsiveContainer, PieChart, Pie, Cell,      
 } from 'recharts'
 import styles from './DashboardPage.module.css'
 
@@ -77,7 +77,7 @@ function StatsContent({ stats }) {
 
   return (
     <>
-      {/* Hàng 4 ô KPI */}
+      {}
       <div className={styles.kpiGrid}>
         {kpis.map(kpi => (
           <div key={kpi.label} className={styles.kpiCard}>
@@ -87,9 +87,9 @@ function StatsContent({ stats }) {
         ))}
       </div>
 
-      {/* Hai biểu đồ: cột (trái) + tròn (phải) */}
+      {}
       <div className={styles.chartsGrid}>
-        {/* Biểu đồ cột - giờ theo ngày */}
+        {}
         <div className={styles.chartCard}>
           <h3 className={styles.chartTitle}>Hours by day</h3>
           {barData.length > 0 ? (
@@ -108,7 +108,7 @@ function StatsContent({ stats }) {
           )}
         </div>
 
-        {/* Biểu đồ tròn - giờ theo công việc */}
+        {}
         <div className={styles.chartCard}>
           <h3 className={styles.chartTitle}>Hours by Task</h3>
           {pieData.length > 0 ? (
@@ -118,10 +118,10 @@ function StatsContent({ stats }) {
                   <PieChart>
                     <Pie
                       data={pieData} cx="50%" cy="50%"
-                      innerRadius={50} outerRadius={90}  // Donut chart (tròn rỗng giữa)
+                      innerRadius={50} outerRadius={90}  
                       paddingAngle={2} dataKey="value"
                     >
-                      {/* Màu khác nhau cho mỗi đoạn */}
+                      {}
                       {pieData.map((_, i) => (
                         <Cell key={i} fill={COLORS[i % COLORS.length]} />
                       ))}
@@ -130,7 +130,7 @@ function StatsContent({ stats }) {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              {/* Chú thích (legend) */}
+              {}
               <ul className={styles.legend}>
                 {pieData.map((item, i) => (
                   <li key={item.name} className={styles.legendItem}>

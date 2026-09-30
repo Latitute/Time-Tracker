@@ -171,7 +171,7 @@ export default function CalendarPage() {
 
   return (
     <div className={styles.page}>
-      {/* Điều hướng tháng */}
+      {}
       <div className={styles.monthNav}>
         <button className={styles.navBtn} onClick={goToPrevMonth} aria-label="Last week">&#8249;</button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
@@ -183,14 +183,14 @@ export default function CalendarPage() {
         <button className={styles.navBtn} onClick={goToNextMonth} aria-label="Next week">&#8250;</button>
       </div>
 
-      {/* Tiêu đề các ngày trong tuần */}
+      {}
       <div className={styles.weekdayRow}>
         {WEEKDAYS.map(day => (
           <div key={day} className={styles.weekdayCell}>{day}</div>
         ))}
       </div>
 
-      {/* Lưới lịch - 42 ô (6 hàng x 7 cột) */}
+      {}
       <div className={styles.calendarGrid}>
         {calendarDays.map(({ date, isCurrentMonth }, idx) => {
           const dateStr = formatDate(date)
@@ -198,8 +198,6 @@ export default function CalendarPage() {
           const dayScheduled = scheduledByDate[dateStr] || []
           const isTodayDate = isToday(date)
           const isSelected = dateStr === selectedDate
-
-          // Hiện tối đa 3 chấm tròn màu (mỗi màu = 1 công việc)
           const uniqueColors = [...new Set(dayEntries.map(e => getTaskColor(e.task_id)))].slice(0, 3)
           const hasScheduled = dayScheduled.length > 0
 
@@ -211,11 +209,11 @@ export default function CalendarPage() {
             >
               <div className={styles.dayNumber}>{date.getDate()}</div>
               <div className={styles.dayIndicators}>
-                {/* Chấm tròn = có bản ghi thời gian */}
+                {}
                 {uniqueColors.map((color, ci) => (
                   <span key={ci} className={styles.entryDot} style={{ background: color }} />
                 ))}
-                {/* Gạch ngang = có lịch hẹn */}
+                {}
                 {hasScheduled && <span className={styles.scheduledDash} />}
               </div>
             </div>
@@ -223,7 +221,7 @@ export default function CalendarPage() {
         })}
       </div>
 
-      {/* Bảng chi tiết ngày đã chọn */}
+      {}
       {selectedDate && (
         <div className={styles.dayPanel}>
           <div className={styles.dayPanelTitle}>
@@ -233,7 +231,7 @@ export default function CalendarPage() {
             </button>
           </div>
 
-          {/* Form tạo lịch hẹn */}
+          {}
           {showScheduleForm && (
             <form className={styles.scheduleForm} onSubmit={handleCreateScheduled}>
               <div className={styles.formField}>
@@ -271,7 +269,7 @@ export default function CalendarPage() {
             </form>
           )}
 
-          {/* Danh sách bản ghi thời gian */}
+          {}
           <div className={styles.sectionTitle}>Timeline ({selectedDateEntries.length})</div>
           {selectedDateEntries.length === 0 ? (
             <p className={styles.empty}>No record</p>
@@ -290,7 +288,7 @@ export default function CalendarPage() {
             </ul>
           )}
 
-          {/* Danh sách lịch hẹn */}
+          {}
           <div className={styles.sectionTitle}>Scheduled ({selectedDateScheduled.length})</div>
           {selectedDateScheduled.length === 0 ? (
             <p className={styles.empty}>No record</p>
@@ -298,7 +296,7 @@ export default function CalendarPage() {
             <ul className={styles.scheduledList}>
               {selectedDateScheduled.map(item => (
                 <li key={item.id} className={`${styles.scheduledItem} ${item.is_completed ? styles.completed : ''}`}>
-                  {/* Checkbox đánh dấu hoàn thành */}
+                  {}
                   <input
                     type="checkbox"
                     className={styles.scheduledCheckbox}
@@ -309,11 +307,11 @@ export default function CalendarPage() {
                   <div className={styles.scheduledInfo}>
                     <span className={styles.scheduledTaskName}>{getTaskTitle(item.task_id)}</span>
                     <span className={styles.scheduledTime}>
-                      {/* Cắt chuỗi start_time để lấy định dạng HH:mm từ 09:00:00 */}
+                      {}
                       {' '}
                       {item.start_time?.slice(0, 5)}
                       
-                      {/* Chuyển đổi giây thành giờ và phút để hiển thị */}
+                      {}
                       {item.estimated_duration ? (() => {
                         const totalMins = Math.floor(item.estimated_duration / 60);
                         const h = Math.floor(totalMins / 60);

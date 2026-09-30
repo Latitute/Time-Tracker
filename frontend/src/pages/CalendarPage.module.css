@@ -55,7 +55,7 @@
 
 .weekdayRow {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);  /* 7 cột bằng nhau */
+  grid-template-columns: repeat(7, 1fr);  
   gap: 1px;
   margin-bottom: 1px;
 }
@@ -67,7 +67,7 @@
   color: var(--color-text-secondary);
   padding: var(--space-2) 0;
   text-transform: uppercase;
-  letter-spacing: 0.05em;    /* Giãn chữ nhẹ */
+  letter-spacing: 0.05em;    
 }
 
 .calendarGrid {

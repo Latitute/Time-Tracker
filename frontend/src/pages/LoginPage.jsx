@@ -34,7 +34,7 @@ export default function LoginPage() {
         <h1 className={styles.title}>Time Tracker</h1>
         <p className={styles.subtitle}>Login to start</p>
 
-        {/* onSubmit: khi người dùng nhấn Enter hoặc nút submit */}
+        {}
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.field}>
             <label>Email</label>
@@ -53,7 +53,7 @@ export default function LoginPage() {
             />
           </div>
 
-          {/* Hiện lỗi chỉ khi có lỗi */}
+          {}
           {error && <p className={styles.error}>{error}</p>}
 
           <button type="submit" className={styles.submitBtn} disabled={loading}>
@@ -61,7 +61,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        {/* Link chuyển sang trang đăng ký */}
+        {}
         <p className={styles.switch}>
           Don't have account yet?  <Link to="/signup">Register</Link>
         </p>

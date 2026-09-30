@@ -5,11 +5,7 @@ import { task, timeEntry, timer as timerApi } from '../services/api.js'
 import { formatTime, formatDuration, formatLocalTime, todayDate } from '../utils/format-time.js'
 import styles from './TimerPage.module.css'
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
 const DURATION_PRESETS = [5, 10, 15, 25, 30, 45, 60]
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getEntryStatus(entry) {
   if (entry.end_time) return 'done'
@@ -23,40 +19,29 @@ function statusLabel(status) {
   return 'Sắp tới'
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function TimerPage() {
   const { token } = useAuth()
   const countdown = useTimer()
 
-  // Data
   const [tasks, setTasks]               = useState([])
   const [todayEntries, setTodayEntries] = useState([])
 
-  // Timer state
   const [activeEntryId, setActiveEntryId] = useState(null)
   const [starting, setStarting]           = useState(false)
-  const [stopping, setStopping]           = useState(false)  // chống duplicate stop request
+  const [stopping, setStopping]           = useState(false)
 
-  // Công việc đang chọn
   const [filterTaskId, setFilterTaskId] = useState('')
 
-  // Chế độ timer
   const [hasTargetDuration, setHasTargetDuration] = useState(false)
   const [durationMinutes, setDurationMinutes]     = useState(25)
 
-  // Form tạo task nhanh
   const [showQuickForm, setShowQuickForm] = useState(false)
   const [quickTitle, setQuickTitle]       = useState('')
   const [quickDesc, setQuickDesc]         = useState('')
 
-  // Notification
   const [notification, setNotification] = useState(null)
   const expiredHandledRef = useRef(false)
-  // Cleanup ref cho notification timeout — tránh setState sau unmount
   const notifTimerRef = useRef(null)
-
-  // ─── Notification helper ──────────────────────────────────────────────────
 
   const showNotification = useCallback((msg, durationMs = 8000) => {
     if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
@@ -64,12 +49,9 @@ export default function TimerPage() {
     notifTimerRef.current = setTimeout(() => setNotification(null), durationMs)
   }, [])
 
-  // Clear timeout khi unmount
   useEffect(() => () => {
     if (notifTimerRef.current) clearTimeout(notifTimerRef.current)
   }, [])
-
-  // ─── Load data + khôi phục timer đang chạy ────────────────────────────────
 
   const loadData = useCallback(async () => {
     try {
@@ -96,8 +78,6 @@ export default function TimerPage() {
             countdown.startUp(active.start_time)
           }
         } catch (timerErr) {
-          // #17: start_time từ server không parse được → data corruption
-          // Không restore timer — hiển thị lỗi và để user tải lại trang
           console.error('[TimerPage] Invalid start_time from server:', timerErr)
           showNotification('Không thể khôi phục timer. Vui lòng tải lại trang.')
           setActiveEntryId(null)
@@ -106,12 +86,9 @@ export default function TimerPage() {
     } catch (err) {
       console.error('[TimerPage loadData]', err)
     }
-  }, [token]) // eslint-disable-line
+  }, [token])
 
   useEffect(() => { loadData() }, [token])
-
-  // ─── Auto-stop khi countdown về 0 ─────────────────────────────────────────
-  // Chỉ kích hoạt ở chế độ countdown (isExpired không bao giờ true ở stopwatch)
 
   useEffect(() => {
     if (!countdown.isExpired || expiredHandledRef.current) return
@@ -122,30 +99,24 @@ export default function TimerPage() {
       || todayEntries.find(e => e.id === activeEntryId)?.task_title
       || 'công việc'
 
-    // #20: Thông báo "đang lưu" TRƯỚC khi gọi API
     showNotification(`⏰ Hết giờ! Đang lưu kết quả...`, 30_000)
 
     timerApi.stop(token)
       .then(async () => {
-        // #19: Chỉ reset UI sau khi API thành công
         countdown.reset()
         setActiveEntryId(null)
         setHasTargetDuration(false)
         const entries = await timeEntry.list(token, todayDate())
         setTodayEntries(entries)
-        // #20: Cập nhật notification thành thông báo thành công
         showNotification(`⏰ Hết giờ! Công việc "${taskTitle}" đã hoàn thành.`)
       })
       .catch(err => {
-        // #19: API fail → KHÔNG reset UI, timer vẫn hiện 00:00, user có thể bấm Dừng thủ công
         console.warn('[TimerPage auto-stop]', err)
-        expiredHandledRef.current = false // cho phép retry
+        expiredHandledRef.current = false
         showNotification('Không thể lưu kết quả tự động. Vui lòng bấm "Dừng lại" để thử lại.')
       })
       .finally(() => setStopping(false))
-  }, [countdown.isExpired]) // eslint-disable-line
-
-  // ─── Tạo task nhanh ───────────────────────────────────────────────────────
+  }, [countdown.isExpired])
 
   async function handleQuickCreate(e) {
     e.preventDefault()
@@ -162,12 +133,9 @@ export default function TimerPage() {
       setTasks(taskList)
       if (created?.id) setFilterTaskId(String(created.id))
     } catch (err) {
-      // #27: Hiển thị lỗi rõ ràng thay vì swallow
       showNotification(`Không thể tạo công việc: ${err.message || 'Lỗi không xác định'}`)
     }
   }
-
-  // ─── Start timer ──────────────────────────────────────────────────────────
 
   async function handleStart() {
     if (!filterTaskId) return
@@ -190,7 +158,6 @@ export default function TimerPage() {
           countdown.startUp(entry.start_time)
         }
       } catch (timerErr) {
-        // Server trả start_time không hợp lệ (không nên xảy ra, nhưng handle an toàn)
         console.error('[TimerPage handleStart] Invalid start_time:', timerErr)
         showNotification('Timer đã tạo nhưng không thể hiển thị. Vui lòng tải lại trang.')
       }
@@ -203,38 +170,30 @@ export default function TimerPage() {
     }
   }
 
-  // ─── Stop timer (thủ công) ────────────────────────────────────────────────
-
   async function handleStop() {
     if (!activeEntryId || stopping) return
     setStopping(true)
-    countdown.stop()  // tạm dừng UI timer ngay lập tức (không reset)
+    countdown.stop()
     try {
       await timerApi.stop(token)
 
-      // #18: Chỉ reset UI sau khi API THÀNH CÔNG
       countdown.reset()
       setActiveEntryId(null)
       setHasTargetDuration(false)
       const entries = await timeEntry.list(token, todayDate())
       setTodayEntries(entries)
     } catch (err) {
-      // #18: API fail → KHÔNG reset. Timer UI đang pause, user có thể thử lại.
-      // Re-enable lại timer display bằng cách restart interval từ hiện tại
       console.warn('[handleStop]', err)
       if (err.status === 408) {
         showNotification('Máy chủ không phản hồi. Timer vẫn đang chạy — vui lòng thử lại.')
       } else {
         showNotification(`Không thể dừng timer: ${err.message || 'Lỗi không xác định'}`)
       }
-      // Restore timer: gọi lại loadData để đồng bộ state từ server
       await loadData().catch(() => {})
     } finally {
       setStopping(false)
     }
   }
-
-  // ─── Derived ──────────────────────────────────────────────────────────────
 
   const isRunning  = countdown.isRunning
   const activeTask = tasks.find(t => t.id === Number(filterTaskId))
@@ -254,12 +213,9 @@ export default function TimerPage() {
     .slice()
     .sort((a, b) => new Date(a.start_time) - new Date(b.start_time))
 
-  // ─── Render ───────────────────────────────────────────────────────────────
-
   return (
     <div className={styles.page}>
 
-      {/* ── Notification banner ── */}
       {notification && (
         <div className={styles.notification}>
           <span>{notification}</span>
@@ -267,10 +223,8 @@ export default function TimerPage() {
         </div>
       )}
 
-      {/* ── Timer section ── */}
       <div className={styles.timerSection}>
 
-        {/* Chọn công việc */}
         <div className={styles.taskRow}>
           <select
             className={styles.taskSelect}
@@ -293,7 +247,6 @@ export default function TimerPage() {
           </button>
         </div>
 
-        {/* ── Form tạo task nhanh ── */}
         {showQuickForm && (
           <form className={styles.quickForm} onSubmit={handleQuickCreate}>
             <input
@@ -319,7 +272,6 @@ export default function TimerPage() {
           </form>
         )}
 
-        {/* Tên task đang chọn/chạy */}
         {activeTask && !showQuickForm && (
           <p className={styles.runningTitle}>
             <span
@@ -330,7 +282,6 @@ export default function TimerPage() {
           </p>
         )}
 
-        {/* ── Toggle đặt thời lượng (chỉ hiện khi chưa chạy) ── */}
         {!isRunning && (
           <label className={styles.durationToggle}>
             <input
@@ -342,7 +293,6 @@ export default function TimerPage() {
           </label>
         )}
 
-        {/* ── Picker thời lượng ── */}
         {!isRunning && hasTargetDuration && (
           <div className={styles.durationRow}>
             <div className={styles.durationInputs}>
@@ -365,12 +315,10 @@ export default function TimerPage() {
           </div>
         )}
 
-        {/* ── Đồng hồ ── */}
         <div className={`${styles.timerDisplay} ${timerColorClass}`}>
           {formatTime(displaySeconds)}
         </div>
 
-        {/* ── Nút Start / Stop ── */}
         {isRunning || countdown.isExpired ? (
           <button
             className={styles.stopBtn}
@@ -390,7 +338,6 @@ export default function TimerPage() {
         )}
       </div>
 
-      {/* ── Log hôm nay ── */}
       <div className={styles.logSection}>
         <h3 className={styles.logTitle}>Hôm nay</h3>
 

@@ -5,11 +5,6 @@ import pool from '../config/db.js'
 const router = Router()
 router.use(authMiddleware)
 
-// ─── Validation helpers ───────────────────────────────────────────────────────
-
-/**
- * YYYY-MM-DD với round-trip check — bắt các ngày tưởng hợp lệ như 2026-02-30.
- */
 function isValidDate(str) {
   if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return false
   const [y, m, d] = str.split('-').map(Number)
@@ -17,10 +12,6 @@ function isValidDate(str) {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
 }
 
-/**
- * HH:mm hoặc HH:mm:ss với range check — bắt 25:80, 99:99, v.v.
- * null/undefined = hợp lệ (field optional).
- */
 function isValidTime(str) {
   if (str == null) return true
   const m = typeof str === 'string' && str.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/)
@@ -29,23 +20,15 @@ function isValidTime(str) {
   return h >= 0 && h <= 23 && min >= 0 && min <= 59 && sec >= 0 && sec <= 59
 }
 
-/**
- * Số nguyên dương (> 0). null/undefined = hợp lệ (field optional).
- * 0 giây không có nghĩa với scheduled task.
- */
 function isValidDuration(val) {
   if (val == null) return true
   return Number.isInteger(val) && val > 0
 }
 
-// ─── GET /api/scheduled-tasks ────────────────────────────────────────────────
-
 router.get('/', async (req, res) => {
   try {
     const { date, from, to } = req.query
-
     if (from || to) {
-      // Yêu cầu cả hai khi dùng range
       if (!from || !to) {
         return res.status(400).json({ error: 'Cần cả from và to khi dùng range' })
       }
@@ -87,13 +70,9 @@ router.get('/', async (req, res) => {
   }
 })
 
-// ─── POST /api/scheduled-tasks ───────────────────────────────────────────────
-
 router.post('/', async (req, res) => {
   try {
     const { task_id, scheduled_date, start_time, estimated_duration } = req.body
-
-    // ── Validation ────────────────────────────────────────────────────────────
     if (!task_id || !scheduled_date) {
       return res.status(400).json({ error: 'Thiếu task_id hoặc scheduled_date' })
     }
@@ -103,7 +82,6 @@ router.post('/', async (req, res) => {
     if (!isValidTime(start_time)) {
       return res.status(400).json({ error: 'start_time không hợp lệ (cần HH:mm hoặc HH:mm:ss, VD: 09:30)' })
     }
-    // estimated_duration phải > 0; dùng ?? (không phải ||) để 0 không fallback về 3600
     if (estimated_duration !== undefined && estimated_duration !== null && !isValidDuration(estimated_duration)) {
       return res.status(400).json({ error: 'estimated_duration phải là số nguyên dương (đơn vị: giây)' })
     }
@@ -116,7 +94,6 @@ router.post('/', async (req, res) => {
       return res.status(404).json({ error: 'Không tìm thấy công việc' })
     }
 
-    // ?? phân biệt "không gửi" (null/undefined → default 3600) với "gửi 0" (→ lỗi validation trên)
     const resolvedDuration = estimated_duration ?? 3600
 
     const [result] = await pool.execute(
@@ -137,8 +114,6 @@ router.post('/', async (req, res) => {
   }
 })
 
-// ─── PUT /api/scheduled-tasks/:id ────────────────────────────────────────────
-
 router.put('/:id', async (req, res) => {
   try {
     const [existing] = await pool.execute(
@@ -151,7 +126,6 @@ router.put('/:id', async (req, res) => {
 
     const { is_completed, start_time, estimated_duration } = req.body
 
-    // ── Validation ────────────────────────────────────────────────────────────
     if (is_completed !== undefined && typeof is_completed !== 'boolean') {
       return res.status(400).json({ error: 'is_completed phải là boolean' })
     }
@@ -184,8 +158,6 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ error: 'Lỗi server' })
   }
 })
-
-// ─── DELETE /api/scheduled-tasks/:id ─────────────────────────────────────────
 
 router.delete('/:id', async (req, res) => {
   try {
