@@ -3,88 +3,83 @@ import { authMiddleware } from '../middleware/auth.js'
 import pool from '../config/db.js'
 
 const router = Router()
-
 router.use(authMiddleware)
 
+// GET: Lấy lịch trình với chuẩn hóa ngày tháng
 router.get('/', async (req, res) => {
   try {
     const { date, from, to } = req.query
+    
+    // Câu lệnh SQL chuẩn hóa cột scheduled_date về dạng DATE
+    let sql = `
+      SELECT st.*, t.title as task_title, t.color as task_color 
+      FROM scheduled_tasks st
+      INNER JOIN tasks t ON st.task_id = t.id
+      WHERE st.user_id = ?
+    `
+    let params = [req.user.id]
 
     if (from && to) {
-      const [rows] = await pool.execute(
-        `SELECT st.*, t.title as task_title, t.color as task_color
-         FROM scheduled_tasks st
-         INNER JOIN tasks t ON st.task_id = t.id
-         WHERE st.user_id = ? AND st.scheduled_date BETWEEN ? AND ?
-         ORDER BY st.scheduled_date, st.start_time`,
-        [req.user.id, from, to]
-      )
-      return res.json(rows)
+      // Ép kiểu DATE() để so sánh đúng định dạng YYYY-MM-DD
+      sql += ` AND DATE(st.scheduled_date) BETWEEN DATE(?) AND DATE(?)`
+      params.push(from, to)
+    } else if (date) {
+      sql += ` AND DATE(st.scheduled_date) = DATE(?)`
+      params.push(date)
     }
 
-    if (!date) {
-      return res.status(400).json({ error: 'Thiếu tham số date' })
-    }
-
-    const [rows] = await pool.execute(
-      `SELECT st.*, t.title as task_title, t.color as task_color
-       FROM scheduled_tasks st
-       INNER JOIN tasks t ON st.task_id = t.id
-       WHERE st.user_id = ? AND st.scheduled_date = ?
-       ORDER BY st.start_time`,
-      [req.user.id, date]
-    )
+    const [rows] = await pool.execute(sql + " ORDER BY st.scheduled_date, st.start_time", params)
     res.json(rows)
-  } catch {
-    res.status(500).json({ error: 'Lỗi server' })
+  } catch (error) {
+    console.error('Fetch schedule error:', error)
+    res.status(500).json({ error: 'Server error' })
   }
 })
 
+// POST: Thêm lịch trình mới (Đã cập nhật để nhận Deadline)
 router.post('/', async (req, res) => {
   try {
-    const { task_id, scheduled_date, start_time, estimated_duration } = req.body
+    const { 
+      task_id, 
+      new_task_title, 
+      category, 
+      color, 
+      scheduled_date, 
+      start_time,
+      deadline_date, // <-- Hứng thêm deadline_date từ frontend
+      deadline_time  // <-- Hứng thêm deadline_time từ frontend
+    } = req.body
 
-    if (!task_id || !scheduled_date) {
-      return res.status(400).json({ error: 'Thiếu task_id hoặc scheduled_date' })
+    if (!scheduled_date) {
+      return res.status(400).json({ error: 'Missing scheduled_date' })
     }
 
-     const [result] = await pool.execute(
-      'INSERT INTO scheduled_tasks (user_id, task_id, scheduled_date, start_time, estimated_duration) VALUES (?, ?, ?, ?, ?)',
-      [req.user.id, task_id, scheduled_date, start_time || null, estimated_duration || 3600]
-    )
+    let finalTaskId = task_id
 
-const [rows] = await pool.execute(
-      `SELECT st.*, t.title as task_title, t.color as task_color
-       FROM scheduled_tasks st
-       INNER JOIN tasks t ON st.task_id = t.id
-       WHERE st.id = ?`,
-      [result.insertId]
-    )
-    res.status(201).json(rows[0])
-  } catch {
-    res.status(500).json({ error: 'Lỗi server' })
-  }
-})
-
-router.put('/:id', async (req, res) => {
-  try {
-    const [existing] = await pool.execute(
-      'SELECT * FROM scheduled_tasks WHERE id = ? AND user_id = ?',
-      [req.params.id, req.user.id]
-    )
-    if (existing.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy lịch hẹn' })
+    // Tự động tạo Task mẫu nếu là việc mới
+    if ((!finalTaskId || finalTaskId === 'new') && new_task_title) {
+      const [taskResult] = await pool.execute(
+        'INSERT INTO tasks (user_id, title, category, color) VALUES (?, ?, ?, ?)',
+        [req.user.id, new_task_title.trim(), category || 'STUDY', color || '#4C6EF5']
+      )
+      finalTaskId = taskResult.insertId
     }
 
-    const { is_completed, start_time, estimated_duration } = req.body
+    if (!finalTaskId || finalTaskId === 'new') {
+      return res.status(400).json({ error: 'Missing valid task_id' })
+    }
 
-    await pool.execute(
-      'UPDATE scheduled_tasks SET is_completed = ?, start_time = ?, estimated_duration = ? WHERE id = ?',
+    // === CẬP NHẬT: Thêm 2 cột deadline vào câu lệnh INSERT ===
+    const [result] = await pool.execute(
+      `INSERT INTO scheduled_tasks (user_id, task_id, scheduled_date, start_time, deadline_date, deadline_time) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
-        is_completed !== undefined ? is_completed : existing[0].is_completed,
-        start_time ?? existing[0].start_time,
-        estimated_duration ?? existing[0].estimated_duration,
-        req.params.id,
+        req.user.id, 
+        finalTaskId, 
+        scheduled_date, 
+        start_time || null,
+        deadline_date || null, // Nếu không nhập sẽ lưu NULL
+        deadline_time || null  // Nếu không nhập sẽ lưu NULL
       ]
     )
 
@@ -93,28 +88,13 @@ router.put('/:id', async (req, res) => {
        FROM scheduled_tasks st
        INNER JOIN tasks t ON st.task_id = t.id
        WHERE st.id = ?`,
-      [req.params.id]
+      [result.insertId]
     )
-    res.json(rows[0])
-  } catch {
-    res.status(500).json({ error: 'Lỗi server' })
-  }
-})
-
-router.delete('/:id', async (req, res) => {
-  try {
-    const [existing] = await pool.execute(
-      'SELECT * FROM scheduled_tasks WHERE id = ? AND user_id = ?',
-      [req.params.id, req.user.id]
-    )
-    if (existing.length === 0) {
-      return res.status(404).json({ error: 'Không tìm thấy lịch hẹn' })
-    }
-
-    await pool.execute('DELETE FROM scheduled_tasks WHERE id = ?', [req.params.id])
-    res.json({ message: 'Đã xóa lịch hẹn' })
-  } catch {
-    res.status(500).json({ error: 'Lỗi server' })
+    
+    res.status(201).json(rows[0])
+  } catch (error) {
+    console.error('Create schedule error:', error)
+    res.status(500).json({ error: 'Server error' })
   }
 })
 

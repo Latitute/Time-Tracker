@@ -174,3 +174,42 @@
     justify-content: flex-end;     
   }
 }
+.selectInput {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px; /* Độ bo góc giống với ảnh mẫu của bạn */
+  background-color: #fff;
+  font-size: 14px;
+  outline: none;
+}
+.taskCategory {
+  font-size: 11px;          /* Giảm cỡ chữ nhỏ xuống hẳn */
+  font-weight: 600;         /* Giữ độ đậm vừa phải để dễ đọc */
+  color: #64748b;           /* Đổi sang màu xám thanh lịch, không bị thô */
+  text-transform: uppercase;/* Giữ viết hoa cho có nét định danh */
+  letter-spacing: 0.5px;    /* Hơi giãn chữ ra một chút nhìn cho hiện đại */
+  display: block;           /* Xuống dòng mượt mà */
+  margin: 2px 0 4px 0;      /* Căn khoảng cách trên dưới cho thoáng */
+}
+.taskTitle {
+  font-size: 18px;       /* Tăng kích thước chữ (bạn có thể chỉnh lên 20px nếu muốn to nữa) */
+  font-weight: 600;      /* Làm đậm chữ để nổi bật hẳn lên */
+  color: #1e293b;        /* Màu chữ tối đậm, giúp nhìn sắc nét và rõ ràng hơn */
+  display: block;        /* Ép dòng tiêu đề nằm riêng một dòng */
+  margin-bottom: 2px;    /* Tạo khoảng cách nhỏ với phần Category phía dưới */
+}
+/* Class dùng riêng khi Task chuyển sang trạng thái SỬA */
+.editingCard {
+  display: block !important;   /* Tắt Flexbox của card thường để Form xuống dòng tự nhiên */
+  padding: 20px !important;    /* Khoảng cách từ viền ngoài vào các ô nhập liệu (bằng form gốc) */
+}
+
+/* Reset lại cấu trúc Form khi nó nằm inside cái Card sửa tại chỗ */
+.editingCard form {
+  background: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  width: 100%;
+}

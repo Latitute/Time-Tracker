@@ -14,12 +14,47 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function computeStreak(byDay) {
   if (!byDay || byDay.length === 0) return 0
-  const sorted = [...byDay].sort((a, b) => b.date.localeCompare(a.date))
-  let streak = 0
-  for (const day of sorted) {
-    if (day.totalSeconds > 0) streak++
-    else break
+
+  // 1. Lọc chỉ lấy các ngày có hoạt động (> 0s) và sắp xếp ngày giảm dần (mới nhất lên đầu)
+  // Lưu ý: date cần ở dạng ISO 'YYYY-MM-DD'
+  const activeDays = byDay
+    .filter(day => Number(day.totalSeconds) > 0)
+    .map(day => day.date)
+    .sort((a, b) => b.localeCompare(a))
+
+  if (activeDays.length === 0) return 0
+
+  // 2. Lấy chuỗi YYYY-MM-DD của Hôm nay và Hôm qua
+  const now = new Date()
+  const todayStr = now.toISOString().slice(0, 10)
+  
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  const yesterdayStr = yesterday.toISOString().slice(0, 10)
+
+  // 3. Nếu ngày active gần nhất KHÔNG PHẢI là Hôm nay hoặc Hôm qua -> Streak đã bị đứt
+  const latestActiveDate = activeDays[0]
+  if (latestActiveDate !== todayStr && latestActiveDate !== yesterdayStr) {
+    return 0
   }
+
+  // 4. Đếm số ngày liên tục
+  let streak = 1
+  for (let i = 0; i < activeDays.length - 1; i++) {
+    const current = new Date(activeDays[i])
+    const next = new Date(activeDays[i + 1])
+
+    // Tính khoảng cách giữa 2 ngày (tính theo ngày)
+    const diffInTime = current.getTime() - next.getTime()
+    const diffInDays = Math.round(diffInTime / (1000 * 3600 * 24))
+
+    if (diffInDays === 1) {
+      streak++
+    } else {
+      break // Đứt chuỗi liên tục
+    }
+  }
+
   return streak
 }
 
@@ -60,18 +95,18 @@ function StatsContent({ stats }) {
 
   const barData = (stats.byDay || []).map(d => ({
     day: DAY_LABELS[new Date(d.date).getDay()],  
-    hours: Math.round((d.totalSeconds / 3600) * 100) / 100,  
+    hours: Math.round((d.totalSeconds / 60) * 100) / 100,  
   }))
 
   const pieData = (stats.byTask || []).map(t => ({
-    name: t.taskName || t.task_name || 'Other',
-    value: Math.round((t.totalSeconds / 3600) * 100) / 100,
+    name: t.title || t.title || 'Other',
+    value: Math.round((t.totalSeconds / 60) * 100) / 100,
   }))
 
-  const kpis = [
-    { label: 'Today', value: formatDuration(todaySeconds) },
-    { label: 'This week', value: formatDuration(weekSeconds) },
-    { label: 'Daily Average', value: formatDuration(avgSeconds) },
+ const kpis = [
+    { label: 'Today', value: formatDuration(todaySeconds * 60) },
+    { label: 'This week', value: formatDuration(weekSeconds * 60) },
+    { label: 'Daily Average', value: formatDuration(avgSeconds * 60) },
     { label: 'Streak', value: `${streak} day` },
   ]
 

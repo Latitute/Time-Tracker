@@ -227,16 +227,6 @@
   gap: var(--space-2);
 }
 
-.scheduledItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  background: var(--color-surface);
-  border-radius: var(--radius-md);
-  font-size: var(--text-sm);
-}
-
 .scheduledItem.completed {
   opacity: 0.5;
   text-decoration: line-through;
@@ -361,4 +351,88 @@
 
 .cancelFormBtn:hover {
   background: var(--color-surface);
+}
+
+/* Sắp xếp 2 ô input nằm cạnh nhau trên cùng một hàng */
+.formRow {
+  display: flex;
+  gap: 16px;
+  width: 100%;
+}
+
+.formRow .formField {
+  flex: 1;
+}
+
+/* Hiển thị chấm màu của công việc ngay cạnh dropdown khi chọn */
+.selectWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.selectedTaskBadge {
+  position: absolute;
+  left: 12px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Đẩy các nút Submit/Cancel về góc phải giống hình mẫu */
+.formActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.scheduledItem {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* Khoảng cách giữa dấu chấm và nội dung */
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.scheduledTaskName {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.scheduledTime {
+  font-size: 12px;
+  color: #868e96;
+}
+/* 1. Định nghĩa chấm tròn dùng chung cho cả Timeline và Scheduled */
+.bulletDot {
+  width: 8px;   /* Đồng bộ với entryDotLarge */
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* 2. Style cho Scheduled Item */
+.scheduledList {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.scheduledItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3); /* Đồng bộ khoảng cách với entryItem (var(--space-3)) */
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+}
+
+.scheduledInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }

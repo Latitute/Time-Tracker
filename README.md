@@ -265,40 +265,55 @@ Dự án được phát triển theo 6 bước. Mỗi bước có một branch r
 Ứng dụng có 4 bảng chính:
 
 ### Bảng `users` — Người dùng
+
 | Cột | Kiểu | Mô tả |
-|-----|------|--------|
+| --- | --- | --- |
 | id | INT | Khóa chính (tự tăng) |
 | name | VARCHAR(100) | Tên người dùng |
 | email | VARCHAR(255) | Email (duy nhất, dùng để đăng nhập) |
-| password_hash | VARCHAR(255) | Mật khẩu đã mã hóa (bcrypt) |
+| password_hash | VARCHAR(255) | Mật khẩu đã mã hóa |
+| created_at | TIMESTAMP | Thời điểm tạo tài khoản |
+| updated_at | TIMESTAMP | Thời điểm cập nhật thông tin gần nhất |
 
 ### Bảng `tasks` — Công việc
+
 | Cột | Kiểu | Mô tả |
-|-----|------|--------|
-| id | INT | Khóa chính |
+| --- | --- | --- |
+| id | INT | Khóa chính (tự tăng) |
 | user_id | INT | Người dùng sở hữu (khóa ngoại → users) |
-| title | VARCHAR(200) | Tên công việc |
-| description | TEXT | Mô tả (tùy chọn) |
-| color | VARCHAR(7) | Màu hiển thị (VD: #4361EE) |
+| title | VARCHAR(255) | Tên công việc |
+| description | TEXT | Mô tả chi tiết (tùy chọn) |
+| color | VARCHAR(7) | Mã màu hiển thị (VD: #4361EE) |
+| category | ENUM | Phân loại ('STUDY', 'WORK', 'READING', 'SOCIAL', 'ENTERTAINMENT', 'EXERCISE', 'REST', 'OTHERS') |
+| progress | ENUM | Trạng thái tiến độ ('TODO', 'IN_PROGRESS', 'PENDING', 'DONE') |
+| estimate_time | INT | Thời gian ước tính (phút, mặc định: 30) |
+| is_active | BOOLEAN | Trạng thái hoạt động (mặc định: TRUE) |
+| created_at | TIMESTAMP | Thời điểm tạo công việc |
 
 ### Bảng `time_entries` — Bản ghi thời gian
+
 | Cột | Kiểu | Mô tả |
-|-----|------|--------|
-| id | INT | Khóa chính |
+| --- | --- | --- |
+| id | INT | Khóa chính (tự tăng) |
 | user_id | INT | Khóa ngoại → users |
-| task_id | INT | Khóa ngoại → tasks |
+| task_id | INT | Khóa ngoại → tasks (có thể NULL khi task bị xóa) |
 | start_time | DATETIME | Thời gian bắt đầu |
 | end_time | DATETIME | Thời gian kết thúc (NULL = đang chạy) |
-| duration | INT | Thời lượng (giây) |
+| duration | INT | Thời lượng thực hiện (giây) |
+| description | TEXT | Ghi chú thêm (tùy chọn) |
 | date | DATE | Ngày ghi nhận |
+| created_at | TIMESTAMP | Thời điểm tạo bản ghi |
 
 ### Bảng `scheduled_tasks` — Lịch hẹn
+
 | Cột | Kiểu | Mô tả |
-|-----|------|--------|
-| id | INT | Khóa chính |
+| --- | --- | --- |
+| id | INT | Khóa chính (tự tăng) |
 | user_id | INT | Khóa ngoại → users |
 | task_id | INT | Khóa ngoại → tasks |
-| scheduled_date | DATE | Ngày hẹn |
-| start_time | DATETIME | Giờ bắt đầu dự kiến |
-| estimated_duration | INT | Thời lượng dự kiến (giây) |
-| completed | BOOLEAN | Đã hoàn thành chưa |
+| scheduled_date | DATE | Ngày lên lịch thực hiện |
+| start_time | TIME | Giờ bắt đầu dự kiến |
+| deadline_date | DATE | Ngày hạn chót (tùy chọn) |
+| deadline_time | TIME | Giờ hạn chót (tùy chọn) |
+| is_completed | BOOLEAN | Trạng thái hoàn thành (mặc định: FALSE) |
+| created_at | TIMESTAMP | Thời điểm tạo lịch hẹn |

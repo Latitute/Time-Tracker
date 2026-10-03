@@ -99,6 +99,12 @@ export const timeEntry = {
   create: (token, body) => apiFetch('/time-entries', { token, method: 'POST', body: JSON.stringify(body) }),
   // PUT /api/time-entries/:id - Cập nhật bản ghi (khi bấm "Dừng lại")
   update: (token, id, body) => apiFetch(`/time-entries/${id}`, { token, method: 'PUT', body: JSON.stringify(body) }),
+  
+  // --- THÊM DÒNG NÀY VÀO ---
+  // POST /api/time-entries/continue/:id - Tiếp tục công việc cũ
+  continue: (token, id) => apiFetch(`/time-entries/continue/${id}`, { token, method: 'POST' }),
+  // -------------------------
+
   // DELETE /api/time-entries/:id - Xóa bản ghi
   delete: (token, id) => apiFetch(`/time-entries/${id}`, { token, method: 'DELETE' }),
 }

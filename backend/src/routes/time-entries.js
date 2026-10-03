@@ -124,6 +124,36 @@ router.post('/', async (req, res) => {
   }
 })
 
+router.post('/continue/:id', async (req, res) => {
+  try {
+    const [active] = await pool.execute(
+      'SELECT id FROM time_entries WHERE user_id = ? AND end_time IS NULL',
+      [req.user.id]
+    );
+    if (active.length > 0) {
+      return res.status(409).json({ error: 'Bạn đang có phiên khác đang chạy' });
+    }
+
+    const [oldEntry] = await pool.execute(
+      'SELECT task_id, description FROM time_entries WHERE id = ? AND user_id = ?',
+      [req.params.id, req.user.id]
+    );
+
+    if (oldEntry.length === 0) return res.status(404).json({ error: 'Không tìm thấy' });
+
+    const { task_id, description } = oldEntry[0];
+    const [result] = await pool.execute(
+      'INSERT INTO time_entries (user_id, task_id, start_time, date, description) VALUES (?, ?, ?, ?, ?)',
+      [req.user.id, task_id, new Date().toTimeString().slice(0, 8), new Date().toLocaleDateString('sv-SE'), description]
+    );
+
+    const [rows] = await pool.execute('SELECT * FROM time_entries WHERE id = ?', [result.insertId]);
+    res.status(201).json(rows[0]);
+  } catch {
+    res.status(500).json({ error: 'Lỗi server' });
+  }
+});
+
 router.put('/:id', async (req, res) => {
   try {
     const [existing] = await pool.execute(

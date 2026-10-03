@@ -1,4 +1,7 @@
-.page { max-width: 600px; margin: 0 auto; }
+.page { 
+  max-width: 600px; 
+  margin: 0 auto; 
+}
 
 .timerSection {
   text-align: center;
@@ -48,6 +51,10 @@
 
 .quickBtn:hover { background: var(--color-surface); }
 
+/* ==========================================================================
+   FIXED & OPTIMIZED: KHU VỰC QUICK FORM VÀ INLINE BADGES
+   ========================================================================== */
+
 .quickForm {
   max-width: 300px;
   margin: 0 auto var(--space-4);
@@ -58,6 +65,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .quickInput {
@@ -67,6 +75,8 @@
   padding: 0 var(--space-3);
   font-size: var(--text-sm);
   outline: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .quickInput:focus {
@@ -74,18 +84,65 @@
   box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
 }
 
-.colorRow {
+/* Hàng chứa các tag: Ép buộc các tag phải xếp hàng ngang và căn giữa */
+.tagRow {
   display: flex;
-  gap: var(--space-1);
+  flex-direction: row;
+  align-items: center;
   justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap; /* Tự xuống hàng mượt mà nếu màn hình quá nhỏ */
+  width: 100%;
+}
+
+/* Container bọc các cụm popover để định vị absolute */
+.inlinePopupContainer {
+  position: relative;
+  display: inline-block;
+}
+
+/* Nút kích hoạt bảng màu (Chấm tròn đơn thay thế cho 8 chấm) */
+.colorTrigger {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px var(--color-border);
+  cursor: pointer;
+  padding: 0;
+  display: block;
+  flex-shrink: 0;
+  transition: transform 150ms ease;
+}
+
+.colorTrigger:hover {
+  transform: scale(1.1);
+}
+
+/* Bảng menu 8 ô màu đổ xuống khi click vào chấm tròn */
+.inlinePopupColors {
+  position: absolute;
+  top: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1);
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .colorDot {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;           
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;          
   border: 2px solid transparent;
   cursor: pointer;
+  padding: 0;
 }
 
 .colorDot:hover { transform: scale(1.15); }  
@@ -95,6 +152,67 @@
   transform: scale(1.15);
 }
 
+/* Định dạng các Tag Badge (Nút Category & Estimate Time) */
+.tagBadge {
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: 20px;
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+  font-family: inherit;
+  outline: none;
+  transition: all 150ms ease;
+}
+
+.tagBadge:hover {
+  background: var(--color-surface);
+  border-color: var(--color-primary);
+}
+
+/* Dropdown danh sách cho Category và Estimate Time */
+.inlineMenu {
+  position: absolute;
+  top: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) 0;
+  list-style: none;
+  margin: 0;
+  min-width: 120px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.inlineMenu li {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.inlineMenu li:hover {
+  background: var(--color-surface);
+}
+
+/* Trạng thái item đang được lựa chọn tích cực */
+.activeOption {
+  background: rgba(67, 97, 238, 0.1) !important;
+  color: var(--color-primary) !important;
+  font-weight: 600;
+}
+
+/* Giữ nút Tạo & chọn màu xanh Mint/Xanh lá theo đúng hệ thống của bạn */
 .quickSave {
   background: var(--color-success);  
   color: #fff;
@@ -104,14 +222,19 @@
   font-weight: 500;
   font-size: var(--text-sm);
   cursor: pointer;
+  width: 100%;
 }
 
 .quickSave:hover { filter: brightness(0.9); }  
 
+/* ==========================================================================
+   CÁC PHẦN KHÁC (GIỮ NGUYÊN HOẶC ĐỒNG BỘ VỚI SEARCH)
+   ========================================================================== */
+
 .timerDisplay {
   font-family: var(--font-mono);    
   font-size: var(--text-timer);      
-  font-weight: 700;                  
+  font-weight: 700;                                  
   color: var(--color-text);
   margin-bottom: var(--space-6);
   letter-spacing: 2px;               
@@ -138,7 +261,6 @@
   cursor: pointer;
   transition: background 150ms;
 }
-
 
 .startBtn {
   background: var(--color-success);
@@ -210,6 +332,80 @@
   color: var(--color-primary);
 }
 
+/* AUTOCOMPLETE SEARCH STYLES */
+.searchContainer {
+  position: relative;
+  flex: 1; 
+}
+
+.taskInput {
+  width: 100%;
+  padding: 0 35px 0 15px;
+  height: 40px;
+  font-size: var(--text-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  box-sizing: border-box;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+.taskInput:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(67, 97, 238, 0.15);
+}
+
+.taskInput:disabled {
+  background-color: var(--color-surface);
+  cursor: not-allowed;
+}
+
+.arrowDown {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  pointer-events: none;
+}
+
+.dropdownList {
+  position: absolute;
+  width: 100%;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  margin-top: 4px;
+  padding: 0;
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+  z-index: 999; 
+}
+
+.dropdownList li {
+  padding: 10px 15px;
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+}
+
+.dropdownList li:hover {
+  background-color: var(--color-primary);
+  color: white;
+}
+
+.noResult {
+  color: var(--color-text-secondary) !important;
+  font-style: italic;
+  pointer-events: none;
+}
+
+/* RESPONSIVE MEDIA QUERIES */
 @media (max-width: 768px) {
   .timerDisplay {
     font-size: 2.5rem;    
