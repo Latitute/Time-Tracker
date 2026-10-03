@@ -1,45 +1,42 @@
-const express = require('express')
-const bcrypt = require('bcryptjs')
-const jwt = require('jsonwebtoken')
-const pool = require('../config/db')
+import { Router } from 'express'
+import bcrypt from 'bcryptjs'
+import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
+import pool from '../config/db.js'
+import { authMiddleware } from '../middleware/auth.js'
 
-const router = express.Router()
+const router = Router()
+router.use(rateLimit({ windowMs: 60000, max: 10 }))
 
-function getJwtSecret() {
+function signToken(user) {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is not configured')
   }
 
-  return process.env.JWT_SECRET
-}
-
-function createToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, getJwtSecret(), {
+  return jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   })
 }
 
-function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email }
-}
-
-router.post('/register', async (req, res, next) => {
-  const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''
-  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
-  const password = typeof req.body.password === 'string' ? req.body.password : ''
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: 'Name, email and password are required' })
-  }
-
-  if (password.length < 6) {
-    return res.status(400).json({ message: 'Password must be at least 6 characters' })
-  }
-
+router.post('/register', async (req, res) => {
   try {
+    const name = typeof req.body.name === 'string' ? req.body.name.trim() : ''
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    const password = typeof req.body.password === 'string' ? req.body.password : ''
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Please fill in all the information.' })
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'The password must have at least 6 characters.' })
+    }
+    if (!email.includes('@')) {
+      return res.status(400).json({ error: 'Invalid email' })
+    }
+
     const [existingUsers] = await pool.execute('SELECT id FROM users WHERE email = ?', [email])
     if (existingUsers.length > 0) {
-      return res.status(409).json({ message: 'Email is already registered' })
+      return res.status(409).json({ error: 'Email is already registered' })
     }
 
     const passwordHash = await bcrypt.hash(password, 12)
@@ -49,55 +46,52 @@ router.post('/register', async (req, res, next) => {
     )
     const user = { id: result.insertId, name, email }
 
-    return res.status(201).json({ user, token: createToken(user) })
+    return res.status(201).json({ user, token: signToken(user) })
   } catch (error) {
-    return next(error)
+    return res.status(error.code === 'ER_DUP_ENTRY' ? 409 : 500).json({
+      error: error.code === 'ER_DUP_ENTRY' ? 'Email is already registered' : 'Server error',
+    })
   }
 })
 
-router.post('/login', async (req, res, next) => {
-  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
-  const password = typeof req.body.password === 'string' ? req.body.password : ''
-
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' })
-  }
-
+router.post('/login', async (req, res) => {
   try {
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    const password = typeof req.body.password === 'string' ? req.body.password : ''
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Please enter your email and password' })
+    }
+
     const [users] = await pool.execute(
       'SELECT id, name, email, password_hash FROM users WHERE email = ?',
       [email],
     )
     const user = users[0]
-    const passwordMatches = user && await bcrypt.compare(password, user.password_hash)
-
-    if (!passwordMatches) {
-      return res.status(401).json({ message: 'Invalid email or password' })
+    if (!user || !(await bcrypt.compare(password, user.password_hash))) {
+      return res.status(401).json({ error: 'Incorrect email or password' })
     }
 
-    const safeUser = publicUser(user)
-    return res.json({ user: safeUser, token: createToken(safeUser) })
-  } catch (error) {
-    return next(error)
+    const safeUser = { id: user.id, name: user.name, email: user.email }
+    return res.json({ user: safeUser, token: signToken(safeUser) })
+  } catch {
+    return res.status(500).json({ error: 'Server error' })
   }
 })
 
-router.get('/me', require('../middleware/auth'), async (req, res, next) => {
+router.get('/me', authMiddleware, async (req, res) => {
   try {
     const [users] = await pool.execute(
       'SELECT id, name, email FROM users WHERE id = ?',
       [req.user.id],
     )
-    const user = users[0]
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
+    if (!users[0]) {
+      return res.status(404).json({ error: 'User not found' })
     }
-
-    return res.json({ user })
-  } catch (error) {
-    return next(error)
+    return res.json({ user: users[0] })
+  } catch {
+    return res.status(500).json({ error: 'Server error' })
   }
 })
 
-module.exports = router
+export default router

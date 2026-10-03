@@ -1,4 +1,11 @@
-const mysql = require('mysql2/promise')
+import mysql from 'mysql2/promise'
+import dotenv from 'dotenv'
+import { fileURLToPath } from 'url'
+import path from 'path'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
@@ -9,6 +16,7 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: Number(process.env.DB_CONNECTION_LIMIT || 10),
   queueLimit: 0,
+  dateStrings: true,
 })
 
-module.exports = pool
+export default pool
